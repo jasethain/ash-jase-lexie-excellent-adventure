@@ -304,11 +304,12 @@ function useFirebaseCollection(name, fallback = []){
     catch { setItems(prev=>[{ id:`local-${Date.now()}`, ...payload, createdAt:null }, ...prev]); }
   }
   async function update(id, data){
-    if(!id || String(id).startsWith('local-')) {
-      setItems(prev=>prev.map(x=>x.id===id?{...x,...data}:x));
-      return;
-    }
-    await updateDoc(doc(db, name, id), data).catch(()=>{});
+    // Optimistic update first so checkboxes feel instant on iPhone/iPad.
+    setItems(prev=>prev.map(x=>x.id===id?{...x,...data}:x));
+    if(!id || String(id).startsWith('local-') || String(id).startsWith('r')) return;
+    await updateDoc(doc(db, name, id), data).catch(err=>{
+      console.warn('Sync update failed, kept local change', name, id, err);
+    });
   }
   async function remove(id){
     if(!id || String(id).startsWith('local-')) {
@@ -400,7 +401,21 @@ function Reminders({data}){
   const [link,setLink]=useState('');
   const [linkLabel,setLinkLabel]=useState('');
   const [filter,setFilter]=useState('All');
+  const [seeded,setSeeded]=useState(false);
   const smartItems = buildSmartChecklistItems();
+
+  // If Firebase is empty, seed the smart checklist as real Firestore documents.
+  // This fixes the issue where built-in checkbox items looked clickable but had no document to update.
+  useEffect(()=>{
+    if(!seeded && data.ready && data.items.length === 0){
+      setSeeded(true);
+      smartItems.forEach(item=>{
+        const { id, ...payload } = item;
+        data.add({ ...payload, done: !!item.done });
+      });
+    }
+  },[seeded, data.ready, data.items.length]);
+
   const existing = data.items.length ? data.items : smartItems;
   const groups = ['All', ...Array.from(new Set(existing.map(x=>x.group || 'Trip'))).sort()];
   const visible = filter === 'All' ? existing : existing.filter(x=>(x.group || 'Trip')===filter);
@@ -412,10 +427,22 @@ function Reminders({data}){
     await data.add({title, due:due||'Custom', link, linkLabel:linkLabel||'Open link', done:false, group:'Custom'});
     setTitle(''); setDue(''); setLink(''); setLinkLabel('');
   }
+  async function toggleItem(r, checked){
+    const payload = { done: checked, doneAt: checked ? new Date().toISOString() : null };
+    if(!r.id || String(r.id).startsWith('r')){
+      const { id, ...copy } = r;
+      await data.add({ ...copy, ...payload });
+      return;
+    }
+    await data.update(r.id, payload);
+  }
   async function buildSmart(){
     const titles = new Set(data.items.map(x=>x.title));
     for(const item of smartItems){
-      if(!titles.has(item.title)) await data.add({...item, id:undefined});
+      if(!titles.has(item.title)){
+        const { id, ...payload } = item;
+        await data.add({...payload, done:false});
+      }
     }
     alert('Smart checklist built. Route, document and Lexie journal links added.');
   }
@@ -426,7 +453,7 @@ function Reminders({data}){
       <button onClick={buildSmart}>Build / repair smart checklist from itinerary</button>
       <div className="dayTabs">{groups.map(g=><button className={filter===g?'active chip':'chip'} onClick={()=>setFilter(g)}>{g}</button>)}</div>
       {visible.map(r=><div className={r.done?'reminder done':'reminder'} key={r.id || r.title}>
-        <label><input type="checkbox" checked={!!r.done} onChange={e=>data.update(r.id,{done:e.target.checked, doneAt:e.target.checked?new Date().toISOString():null})}/><span>{r.title}</span></label>
+        <label><input type="checkbox" checked={!!r.done} onChange={e=>toggleItem(r, e.target.checked)}/><span>{r.title}</span></label>
         <small>{r.group || 'Trip'} · {r.due}</small>
         <div className="linkRow">
           {r.link && <a className="pill small" href={r.link} target={r.link.startsWith('#')?'_self':'_blank'}><FileText size={14}/> {r.linkLabel || 'Open linked item'}</a>}

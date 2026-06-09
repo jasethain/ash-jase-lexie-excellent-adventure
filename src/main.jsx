@@ -8,6 +8,7 @@ import {
   Home, Users, Route, Gift, RefreshCw, Upload, Save, Eraser
 } from 'lucide-react';
 import './styles.css';
+import './v7.css';
 
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
@@ -196,6 +197,43 @@ const discoveryIdeas = [
   { title:'Harajuku Kawaii Walk', emoji:'🌸', why:'Colourful shops, photo booths and fun little treats.', challenge:'Find something shaped like a bow, cat or star.' }
 ];
 
+
+const rewardStore = [
+  { stars:5, title:'Ice cream reward', emoji:'🍦', detail:'Choose an ice cream or simple sweet treat.' },
+  { stars:10, title:'Tiny souvenir reward', emoji:'🎀', detail:'Small keyring, sticker or gachapon.' },
+  { stars:20, title:'Special snack reward', emoji:'🍟', detail:'Pick a favourite plain-food treat.' },
+  { stars:30, title:'Mystery Japan reward', emoji:'🎁', detail:'Mum and Dad choose a surprise.' },
+  { stars:50, title:'Adventure Champion reward', emoji:'🏆', detail:'Pick a bigger keepsake from the trip.' }
+];
+
+const journalStickers = ['🎀','⭐','🌸','🗻','🏰','🚆','🐱','🍟','🎸','🎡','🇯🇵'];
+
+function buildSmartChecklistItems(){
+  const base = [...defaultReminders];
+  itinerary.forEach(item=>{
+    if(item.day === 'Pre Travel') return;
+    base.push({
+      id:`auto-${item.day.toLowerCase().replace(/\s+/g,'-')}-route`,
+      title:`Check live route and platform details for ${item.title}`,
+      due:item.date,
+      linkLabel:'Open route card',
+      link:item.title.includes('Disney')?'#route-disney':item.title.includes('Sanrio')?'#route-puroland':item.title.includes('Fuji')?'#route-fuji':item.title.includes('Sumo')?'#route-sumo':item.title.includes('Narita') || item.title.includes('Return')?'#route-narita':'#routes',
+      group:'Routes',
+      done:false
+    });
+    base.push({
+      id:`auto-${item.day.toLowerCase().replace(/\s+/g,'-')}-journal`,
+      title:`Help Lexie complete journal page for ${item.title}`,
+      due:item.date,
+      linkLabel:'Open Lexie Journal',
+      link:'#journal',
+      group:'Lexie Journal',
+      done:false
+    });
+  });
+  return base;
+}
+
 const lexiePages = [
   {
     id:'pre',
@@ -306,7 +344,7 @@ function App(){
   const allCollectionsReady = reminders.ready || notes.ready || journal.ready;
 
   const tabs = [
-    ['home','Home','🎀'],['reminders','Reminders','✅'],['routes','Routes','🚆'],
+    ['home','Home','🎀'],['reminders','Checklist','✅'],['routes','Routes','🚆'],['fuji','Fuji','🗻'],
     ['journal','Lexie Journal','📖'],['learn','Japanese','🇯🇵'],['rewards','Rewards','⭐'],
     ['photos','Photos','📷'],['emergency','Emergency','🚨'],['food','Food','🍟'],
     ['money','Currency','💴'],['phone','Apple Devices','📱'],['add','Add Info','➕']
@@ -327,6 +365,7 @@ function App(){
       {tab==='home' && <HomePage nextTrip={nextTrip} reminders={reminders} journal={journal} rewards={rewards} />}
       {tab==='reminders' && <Reminders data={reminders} />}
       {tab==='routes' && <Routes />}
+      {tab==='fuji' && <FujiDay reminders={reminders} />}
       {tab==='journal' && <LexieJournal journal={journal} rewards={rewards} photos={photos} drawings={drawings} />}
       {tab==='learn' && <JapaneseLearning progress={lessons} rewards={rewards} />}
       {tab==='rewards' && <Rewards rewards={rewards} />}
@@ -360,31 +399,51 @@ function Reminders({data}){
   const [due,setDue]=useState('');
   const [link,setLink]=useState('');
   const [linkLabel,setLinkLabel]=useState('');
+  const [filter,setFilter]=useState('All');
+  const smartItems = buildSmartChecklistItems();
+  const existing = data.items.length ? data.items : smartItems;
+  const groups = ['All', ...Array.from(new Set(existing.map(x=>x.group || 'Trip'))).sort()];
+  const visible = filter === 'All' ? existing : existing.filter(x=>(x.group || 'Trip')===filter);
+  const completeCount = existing.filter(x=>x.done).length;
+  const percent = existing.length ? Math.round((completeCount/existing.length)*100) : 0;
+
   async function addReminder(){
     if(!title.trim()) return;
     await data.add({title, due:due||'Custom', link, linkLabel:linkLabel||'Open link', done:false, group:'Custom'});
     setTitle(''); setDue(''); setLink(''); setLinkLabel('');
   }
-  const items = data.items.length ? data.items : defaultReminders;
+  async function buildSmart(){
+    const titles = new Set(data.items.map(x=>x.title));
+    for(const item of smartItems){
+      if(!titles.has(item.title)) await data.add({...item, id:undefined});
+    }
+    alert('Smart checklist built. Route, document and Lexie journal links added.');
+  }
   return <section className="grid">
-    <Card title="Smart Reminders with Links" icon={<CheckSquare/>}>
-      <p>Tick boxes sync between Dad, Mum and Lexie. Relevant reminders open documents, routes or instructions.</p>
-      {items.map(r=><div className={r.done?'reminder done':'reminder'} key={r.id}>
+    <Card title="Smart Checklist & Reminders" icon={<CheckSquare/>}>
+      <p>Checklist and reminders are now one shared list. Tick boxes sync between Dad, Mum and Lexie. Document and route links sit right beside the item they belong to.</p>
+      <div className="progress"><span style={{width:`${percent}%`}}></span></div><p><b>{completeCount}/{existing.length}</b> complete</p>
+      <button onClick={buildSmart}>Build / repair smart checklist from itinerary</button>
+      <div className="dayTabs">{groups.map(g=><button className={filter===g?'active chip':'chip'} onClick={()=>setFilter(g)}>{g}</button>)}</div>
+      {visible.map(r=><div className={r.done?'reminder done':'reminder'} key={r.id || r.title}>
         <label><input type="checkbox" checked={!!r.done} onChange={e=>data.update(r.id,{done:e.target.checked, doneAt:e.target.checked?new Date().toISOString():null})}/><span>{r.title}</span></label>
         <small>{r.group || 'Trip'} · {r.due}</small>
-        {r.link && <a className="pill small" href={r.link} target={r.link.startsWith('#')?'_self':'_blank'}>{r.linkLabel || 'Open linked item'}</a>}
+        <div className="linkRow">
+          {r.link && <a className="pill small" href={r.link} target={r.link.startsWith('#')?'_self':'_blank'}><FileText size={14}/> {r.linkLabel || 'Open linked item'}</a>}
+          {r.group==='Routes' && <a className="pill small" href="#routes"><Route size={14}/> Route hub</a>}
+        </div>
       </div>)}
     </Card>
-    <Card title="Add Reminder" icon={<PlusCircle/>}>
-      <input value={title} onChange={e=>setTitle(e.target.value)} placeholder="Reminder item"/>
+    <Card title="Add Checklist Item" icon={<PlusCircle/>}>
+      <input value={title} onChange={e=>setTitle(e.target.value)} placeholder="Checklist/reminder item"/>
       <input value={due} onChange={e=>setDue(e.target.value)} placeholder="Due date or day"/>
       <input value={linkLabel} onChange={e=>setLinkLabel(e.target.value)} placeholder="Link label, e.g. Open ticket"/>
       <input value={link} onChange={e=>setLink(e.target.value)} placeholder="Document URL, route #route-disney, or Apple Maps link"/>
-      <button onClick={addReminder}>Add synced reminder</button>
+      <button onClick={addReminder}>Add synced checklist item</button>
+      <p className="tiny">Examples: /assets/Qantas_E_Ticket_DQ3AT8.pdf, #route-fuji, #emergency, #journal</p>
     </Card>
   </section>
 }
-
 function Routes(){
   return <section className="grid" id="routes">
     <Card title="Route Rule" icon={<Route/>}><p>The app stores hotel-first route cards. Exact train platforms and departure times should be checked live in Apple Maps on the day because platforms and disruptions can change.</p><a className="pill" href={appleRoute('Tokyo Station')} target="_blank">Test live route from hotel</a></Card>
@@ -418,12 +477,15 @@ function LexieJournal({journal,rewards,photos,drawings}){
   const [page,setPage]=useState('pre');
   const current = lexiePages.find(p=>p.id===page) || lexiePages[0];
   const [answers,setAnswers] = useState({});
+  const [mood,setMood] = useState('😊 Excited');
+  const [stickers,setStickers] = useState([]);
+  function toggleSticker(st){ setStickers(prev=>prev.includes(st)?prev.filter(x=>x!==st):[...prev,st]); }
   async function saveEntry(){
-    await journal.add({ pageId:current.id, pageTitle:current.title, emoji:current.emoji, answers, author:'Lexie', day:dateKey() });
+    await journal.add({ pageId:current.id, pageTitle:current.title, emoji:current.emoji, answers, mood, stickers, author:'Lexie', day:dateKey() });
     await rewards.add({ day:dateKey(), stars:1, reason:`Journal entry: ${current.title}`, type:'journal' });
-    setAnswers({});
+    setAnswers({}); setStickers([]);
   }
-  return <section className="grid">
+  return <section className="grid" id="journal">
     <Card title="Lexie's Adventure Book" icon={<BookOpen/>}>
       <div className="dayTabs">{lexiePages.map(p=><button className={page===p.id?'active chip':'chip'} onClick={()=>setPage(p.id)}>{p.emoji} {p.label}</button>)}</div>
       <h2>{current.emoji} {current.title}</h2>
@@ -431,12 +493,16 @@ function LexieJournal({journal,rewards,photos,drawings}){
         <label>{p}</label>
         <textarea value={answers[p]||''} onChange={e=>setAnswers({...answers,[p]:e.target.value})} placeholder="Write or ask Mum/Dad to help type..." />
       </div>)}
+      <label>How do I feel?</label>
+      <select value={mood} onChange={e=>setMood(e.target.value)}><option>😊 Excited</option><option>😀 Amazing</option><option>🙂 Good</option><option>😐 Okay</option><option>😟 Worried</option><option>😴 Tired</option></select>
+      <label>Choose journal stickers</label>
+      <div className="stickerRow">{journalStickers.map(st=><button className={stickers.includes(st)?'active sticker':'sticker'} onClick={()=>toggleSticker(st)}>{st}</button>)}</div>
       <button onClick={saveEntry}>Save journal page and earn ⭐</button>
     </Card>
     <Card title="Confidence Toolkit" icon={<Heart/>}><ul><li>Talk to Mum or Dad.</li><li>Use the translator phrase cards.</li><li>Find plain food or a snack break.</li><li>Take 3 slow breaths.</li><li>Look at today's plan and pick one small next step.</li></ul></Card>
     <DrawingStudio drawings={drawings} rewards={rewards} pageTitle={current.title}/>
     <PhotoUploader photos={photos} rewards={rewards} source="Lexie Journal"/>
-    <Card title="Saved Journal Pages" icon={<Sparkles/>}>{journal.items.length===0?<p>No journal pages yet.</p>:journal.items.slice(0,8).map(e=><div className="note"><b>{e.emoji} {e.pageTitle}</b><small>{e.deviceDate || ''}</small>{e.answers && Object.entries(e.answers).slice(0,4).map(([q,a])=><p><b>{q}</b><br/>{a}</p>)}</div>)}</Card>
+    <Card title="Saved Journal Pages" icon={<Sparkles/>}>{journal.items.length===0?<p>No journal pages yet.</p>:journal.items.slice(0,8).map(e=><div className="note"><b>{e.emoji} {e.pageTitle}</b><small>{e.deviceDate || ''} · {e.mood || ''}</small>{e.stickers?.length>0 && <div className="stickerLine">{e.stickers.join(' ')}</div>}{e.answers && Object.entries(e.answers).slice(0,4).map(([q,a])=><p><b>{q}</b><br/>{a}</p>)}</div>)}</Card>
   </section>
 }
 
@@ -519,16 +585,12 @@ function JapaneseLearning({progress,rewards}){
 function Rewards({rewards}){
   const total = rewards.items.reduce((a,b)=>a+(b.stars||1),0);
   const todayTotal = rewards.items.filter(r=>r.day===dateKey()).reduce((a,b)=>a+(b.stars||1),0);
-  const milestones = [
-    [5,'Explorer Badge'],[15,'Tokyo Snack Reward'],[30,'Souvenir Reward'],[50,'Adventure Champion'],[75,'Japan Expert'],[100,'Ultimate Explorer']
-  ];
   return <section className="grid">
-    <Card title="Lexie's Rewards" icon={<Trophy/>}><div className="big">{total} ⭐</div><p>Today: {Math.min(todayTotal,5)}/5 easy daily stars.</p><div className="stars">{Array.from({length:5}).map((_,i)=><span className={i<todayTotal?'won':''}>⭐</span>)}</div></Card>
-    <Card title="Milestones" icon={<Gift/>}>{milestones.map(([n,label])=><div className={total>=n?'milestone won':'milestone'}><b>{n} ⭐</b><span>{label}</span></div>)}</Card>
+    <Card title="Lexie's Rewards" icon={<Trophy/>}><div className="big">{total} ⭐</div><p>Today: {Math.min(todayTotal,5)}/5 easy daily stars.</p><div className="stars">{Array.from({length:5}).map((_,i)=><span className={i<todayTotal?'won':''}>⭐</span>)}</div><p className="tiny">Stars can come from journal pages, drawings, photos, Japanese phrases and daily adventure tasks.</p></Card>
+    <Card title="Reward Store" icon={<Gift/>}>{rewardStore.map(item=>{const pct=Math.min(100, Math.round((total/item.stars)*100)); return <div className={total>=item.stars?'milestone won':'milestone'}><b>{item.emoji} {item.stars} ⭐</b><span>{item.title}</span><small>{item.detail}</small><div className="progress"><span style={{width:`${pct}%`}}></span></div>{total>=item.stars && <button>Reward unlocked</button>}</div>})}</Card>
     <Card title="Recent Stars" icon={<Star/>}>{rewards.items.slice(0,20).map(r=><div className="mini">⭐ {r.reason}<small>{r.deviceDate}</small></div>)}</Card>
   </section>
 }
-
 function Photos({photos}){
   return <section className="grid"><PhotoUploader photos={photos} rewards={{add:async()=>{}}} source="Photo Wall"/><Card title="Shared Photo Wall" icon={<ImageIcon/>}><div className="photoGrid bigGrid">{photos.items.map(p=><a href={p.url} target="_blank"><img src={p.url}/><small>{p.caption || p.name}</small></a>)}</div></Card></section>
 }
@@ -536,6 +598,11 @@ function Photos({photos}){
 function Emergency(){
   const lexieCard = 'My name is Lexie. My Dad is Jase and my Mum is Ash. Please call my family. 私の名前はレクシーです。父はジェイス、母はアッシュです。家族に電話してください。';
   return <section className="grid" id="emergency">
+    <Card title="I'm Lost / Help Me" icon={<Shield/>}>
+      <div className="lostCard"><h2>私は迷子です</h2><p>My name is Lexie. My Dad is Jase and my Mum is Ash. Please help me call my family or take me to hotel staff, police, or station staff.</p><p><b>Hotel:</b> {HOTEL.name}<br/>{HOTEL.address}</p><p>ホテルまで連れて行ってください。または家族に電話してください。</p></div>
+      <button onClick={()=>speak('助けてください。私は迷子です。')}>Speak Japanese help phrase</button>
+      <a className="pill" href={appleMaps(HOTEL.apple)} target="_blank">Open hotel in Apple Maps</a>
+    </Card>
     <Card title="Japan Emergency Contacts" icon={<Shield/>}>
       <a className="call" href="tel:110">🚓 Police: 110</a>
       <a className="call" href="tel:119">🚑 Ambulance / Fire: 119</a>
@@ -565,6 +632,24 @@ function Food(){
 
 function Currency({aud,setAud,jpy,setJpy}){
   return <section className="grid"><Card title="Offline AUD ⇄ JPY Converter" icon={<Wallet/>}><p>Last known rate: 1 AUD ≈ ¥{AUD_TO_JPY.toFixed(3)} JPY.</p><label>AUD</label><input type="number" value={aud} onChange={e=>{const v=Number(e.target.value); setAud(v); setJpy(Math.round(v*AUD_TO_JPY))}}/><label>JPY</label><input type="number" value={jpy} onChange={e=>{const v=Number(e.target.value); setJpy(v); setAud((v/AUD_TO_JPY).toFixed(2))}}/><p className="big">${aud} ≈ ¥{Number(jpy).toLocaleString()}</p></Card></section>
+}
+
+function FujiDay({reminders}){
+  const fujiReminders = reminders.items.filter(r=>(r.title||'').toLowerCase().includes('fuji') || (r.link||'').includes('fuji'));
+  const depart = new Date('2026-07-03T08:00:00+09:00');
+  const days = Math.ceil((depart - new Date())/(1000*60*60*24));
+  return <section className="grid">
+    <Card title="Mount Fuji Day Support" icon={<Route/>}>
+      <div className="big">{days>0?days:'Soon'} days</div>
+      <p>Tour departure: 8:00 AM. Arrive early and check guide email around 6 PM the day before.</p>
+      <a className="pill" href="#route-fuji">Open Fuji route card</a>
+      <a className="pill" href="/assets/Tokyo_Meeting_Point.jpg" target="_blank">Open meeting point image</a>
+    </Card>
+    <Card title="Fuji Packing Checklist" icon={<CheckSquare/>}>
+      {['Power bank','Jackets/layers','Cash','Water','Dad/Mum vegetarian snacks','Lexie plain-food snacks','Guide email checked','Apple Maps route checked'].map(item=><div className="mini">☐ {item}</div>)}
+    </Card>
+    <Card title="Linked Fuji Reminders" icon={<FileText/>}>{fujiReminders.length?fujiReminders.map(r=><div className="mini">{r.done?'✅':'☐'} {r.title}<small>{r.due}</small>{r.link&&<a className="pill small" href={r.link}>Open</a>}</div>):<p>No Fuji reminders yet. Use the checklist builder in the Checklist tab.</p>}</Card>
+  </section>
 }
 
 function Phone(){

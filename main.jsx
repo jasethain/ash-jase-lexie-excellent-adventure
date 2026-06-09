@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client';
 import {
   MapPin, Mic, Camera, Wallet, BookOpen, Utensils, Train, PlusCircle,
   Smartphone, Sparkles, Heart, Download, Star, Cloud, CloudOff, Trash2,
-  ShoppingBag, CheckCircle2, Image as ImageIcon, ReceiptText
+  ShoppingBag, CheckCircle2, Image as ImageIcon, ReceiptText, Bell, Clock, CalendarDays
 } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
@@ -76,6 +76,47 @@ const starterChecklist = [
   'Vegetarian meal requests confirmed',
   'Lexie plain-food snack backup packed'
 ];
+
+
+const starterReminders = [
+  { title:'Check passports and travel insurance', date:'2026-06-15', time:'19:00', person:'Family', priority:'High', details:'Confirm passports, Qantas travel insurance, emergency contacts and PDF copies are saved offline.', starter:true },
+  { title:'Turn on ALDI roaming checks', date:'2026-06-20', time:'18:00', person:'Jase/Ash', priority:'High', details:'Confirm international roaming options before leaving Australia. Download offline maps and translator packs while still on home Wi-Fi.', starter:true },
+  { title:'Download offline Apple Maps areas', date:'2026-06-24', time:'19:00', person:'Family', priority:'High', details:'Download Tokyo, Narita, Maihama/Disney, Tama Center/Puroland and Mount Fuji/Kawaguchiko in Apple Maps.', starter:true },
+  { title:'Pack Lexie plain-food backup', date:'2026-06-30', time:'18:30', person:'Family', priority:'High', details:'Pack simple snacks for Lexie plus vegetarian backup snacks for Fuji and Sumo days.', starter:true },
+  { title:'Departure day airport reminder', date:'2026-07-01', time:'06:00', person:'Family', priority:'High', details:'Check passports, chargers, tickets, insurance, ALDI roaming and Qantas flight details before leaving for Melbourne Airport.', starter:true },
+  { title:'Sumo vegetarian meal check', date:'2026-07-02', time:'10:00', person:'Jase/Ash', priority:'High', details:'Confirm vegetarian meal availability for Sumo Entertainment Show. Plan Lexie simple-food fallback before/after.', starter:true },
+  { title:'Fuji guide info check', date:'2026-07-02', time:'18:00', person:'Family', priority:'High', details:'Fuji operator said guide information should arrive around 6 PM the day before. Check inbox and spam.', starter:true },
+  { title:'Mount Fuji early departure', date:'2026-07-03', time:'06:30', person:'Family', priority:'High', details:'Fuji tour departs 8:00 AM from Stand T. Bring jackets, cash, power bank, snacks and meeting point image.', starter:true },
+  { title:'Sanrio Puroland day plan', date:'2026-07-06', time:'08:00', person:'Family', priority:'Medium', details:'Prioritise Hello Kitty character moments, parades, shops, desserts and Lexie journal stamp.', starter:true },
+  { title:'Disney full-day start', date:'2026-07-07', time:'07:00', person:'Family', priority:'High', details:'Use Apple Maps to Maihama. Pack battery bank, tickets, water, vegetarian plans and Lexie food hunt list.', starter:true },
+  { title:'Pack for return flight', date:'2026-07-07', time:'20:30', person:'Family', priority:'High', details:'Pack passports, souvenirs, chargers, travel documents and airport transfer notes before bed.', starter:true },
+  { title:'Return travel document check', date:'2026-07-08', time:'08:00', person:'Family', priority:'High', details:'Check Qantas return flight, luggage, passports, chargers and airport route to Narita.', starter:true }
+];
+
+function reminderDateTime(reminder){
+  if (!reminder?.date) return null;
+  const time = reminder.time || '09:00';
+  const parsed = new Date(`${reminder.date}T${time}:00`);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function reminderStatus(reminder){
+  const when = reminderDateTime(reminder);
+  if (!when) return { label:'No date', rank:4 };
+  const diffMs = when.getTime() - Date.now();
+  const diffHours = diffMs / (1000 * 60 * 60);
+  if (diffHours < -24) return { label:'Past', rank:5 };
+  if (diffHours < 0) return { label:'Due now', rank:0 };
+  if (diffHours <= 24) return { label:'Due within 24h', rank:1 };
+  if (diffHours <= 72) return { label:'Coming up', rank:2 };
+  return { label:`${Math.ceil(diffHours/24)} days away`, rank:3 };
+}
+
+function formatReminderDate(reminder){
+  const when = reminderDateTime(reminder);
+  if (!when) return 'No time set';
+  return when.toLocaleString([], { weekday:'short', day:'numeric', month:'short', hour:'numeric', minute:'2-digit' });
+}
 
 function say(text){
   if(!('speechSynthesis' in window)) return alert('Speech is not available on this device/browser.');
@@ -172,10 +213,11 @@ function App(){
   const shopping = useSyncedCollection('shoppingItems');
   const expenses = useSyncedCollection('expenses');
   const photos = useSyncedCollection('tripPhotos');
+  const reminders = useSyncedCollection('smartReminders', starterReminders);
 
   const tabs = [
     ['home','Home','🎀'],['itinerary','Trip','🗓️'],['maps','Apple Maps','🗺️'],
-    ['journal','Lexie Journal','📖'],['food','Food','🍟'],['photos','Photos','📸'],
+    ['journal','Lexie Journal','📖'],['reminders','Reminders','⏰'],['food','Food','🍟'],['photos','Photos','📸'],
     ['lists','Lists','☑️'],['money','Money','💴'],['translate','Translator','🎤'],
     ['phone','Apple Devices','📱'],['add','Add Info','➕']
   ];
@@ -192,10 +234,11 @@ function App(){
     </header>
     <nav>{tabs.map(t=><button key={t[0]} onClick={()=>setTab(t[0])} className={tab===t[0]?'active':''}><span>{t[2]}</span>{t[1]}</button>)}</nav>
     <main>
-      {tab==='home' && <Home nextTrip={nextTrip} journal={journal.items} notes={notes.items} photos={photos.items} checklist={checklist.items} expenses={expenses.items} />}
+      {tab==='home' && <Home nextTrip={nextTrip} journal={journal.items} notes={notes.items} photos={photos.items} checklist={checklist.items} expenses={expenses.items} reminders={reminders.items} />}
       {tab==='itinerary' && <Timeline />}
       {tab==='maps' && <Maps />}
       {tab==='journal' && <Journal journal={journal} />}
+      {tab==='reminders' && <SmartReminders reminders={reminders} />}
       {tab==='food' && <Food />}
       {tab==='photos' && <Photos photos={photos} />}
       {tab==='lists' && <Lists checklist={checklist} shopping={shopping} />}
@@ -209,12 +252,13 @@ function App(){
 
 function Card({title,icon,children}){return <article className="card"><h2>{icon}{title}</h2>{children}</article>}
 
-function Home({ nextTrip, journal, notes, photos, checklist, expenses }){
+function Home({ nextTrip, journal, notes, photos, checklist, expenses, reminders }){
   const totalJpy = expenses.reduce((sum, e) => sum + Number(e.jpy || 0), 0);
   const nextItem = itinerary.find(x => new Date(`${x.date.replace('Jul','July')} 2026`).getTime() >= Date.now()) || itinerary[0];
+  const nextReminder = [...reminders].filter(r => reminderStatus(r).rank < 5).sort((a,b)=>(reminderDateTime(a)?.getTime()||0)-(reminderDateTime(b)?.getTime()||0))[0];
   return <section className="grid">
     <Card title="Tokyo Countdown" icon={<Sparkles/>}><div className="big">{nextTrip>0?nextTrip:'Trip time!'} days</div><p>Pack passports, insurance, chargers, Apple Maps offline areas and Lexie's snack backup.</p></Card>
-    <Card title="Trip Control Centre" icon={<Heart/>}><p><b>Next adventure:</b> {nextItem.icon} {nextItem.title}</p><p><b>Shared notes:</b> {notes.length}</p><p><b>Journal stamps:</b> {journal.length}</p><p><b>Photos:</b> {photos.length}</p><p><b>Checklist items:</b> {checklist.length}</p><p><b>Spend tracked:</b> ¥{totalJpy.toLocaleString()} / ${(totalJpy/AUD_TO_JPY).toFixed(2)} AUD</p></Card>
+    <Card title="Trip Control Centre" icon={<Heart/>}><p><b>Next adventure:</b> {nextItem.icon} {nextItem.title}</p>{nextReminder && <p><b>Next reminder:</b> ⏰ {nextReminder.title} · {formatReminderDate(nextReminder)}</p>}<p><b>Shared notes:</b> {notes.length}</p><p><b>Journal stamps:</b> {journal.length}</p><p><b>Photos:</b> {photos.length}</p><p><b>Checklist items:</b> {checklist.length}</p><p><b>Smart reminders:</b> {reminders.length}</p><p><b>Spend tracked:</b> ¥{totalJpy.toLocaleString()} / ${(totalJpy/AUD_TO_JPY).toFixed(2)} AUD</p></Card>
     <Card title="Booking Wallet" icon={<Download/>}><a href="/assets/Qantas_E_Ticket_DQ3AT8.pdf">Open Qantas e-ticket PDF</a><a href="/assets/Tokyo_Meeting_Point.jpg">Open Fuji meeting point image</a></Card>
   </section>;
 }
@@ -253,6 +297,100 @@ function Journal({ journal }){
     </Card>
     <Card title="Treasure Hunt" icon={<Star/>}><ul className="hunt"><li>📸 Find Hello Kitty</li><li>🚆 Ride a Tokyo train</li><li>🍦 Try Japanese ice cream</li><li>🏰 Find Mickey</li><li>🗻 Spot Mount Fuji</li><li>🎀 Take a cute shop photo</li></ul></Card>
     <Card title="Synced Journal Entries" icon={<Sparkles/>}>{journal.items.length===0?<p>No entries yet.</p>:journal.items.map(e=><div className="note" key={e.id}><b>{e.emoji} {e.place}</b><small>{stampDate(e.createdAt)} · {e.mood} · {e.author || 'Family'}</small>{e.imageUrl && <img className="photoThumb" src={e.imageUrl} alt="Journal"/>}<p>{e.text || 'Quick stamp added.'}</p>{!e.starter && <button className="danger" onClick={()=>journal.removeItem(e.id)}><Trash2 size={14}/> Delete</button>}</div>)}</Card>
+  </section>;
+}
+
+
+function SmartReminders({ reminders }){
+  const [title,setTitle] = useState('');
+  const [date,setDate] = useState('2026-07-01');
+  const [time,setTime] = useState('09:00');
+  const [person,setPerson] = useState('Family');
+  const [priority,setPriority] = useState('Medium');
+  const [details,setDetails] = useState('');
+  const [permission,setPermission] = useState(typeof Notification === 'undefined' ? 'unsupported' : Notification.permission);
+
+  const sorted = useMemo(() => [...reminders.items].sort((a,b) => {
+    const sa = reminderStatus(a); const sb = reminderStatus(b);
+    if (sa.rank !== sb.rank) return sa.rank - sb.rank;
+    return (reminderDateTime(a)?.getTime() || 0) - (reminderDateTime(b)?.getTime() || 0);
+  }), [reminders.items]);
+
+  const dueSoon = sorted.filter(r => reminderStatus(r).rank <= 1);
+
+  async function addReminder(){
+    if (!title.trim()) return alert('Add a reminder title first.');
+    await reminders.addItem({ title, date, time, person, priority, details, done:false });
+    setTitle(''); setDetails('');
+  }
+
+  async function askNotifications(){
+    if (typeof Notification === 'undefined') {
+      alert('Browser notifications are not supported on this device. Use Add to Calendar / iPhone Reminders as backup.');
+      return;
+    }
+    const result = await Notification.requestPermission();
+    setPermission(result);
+    if (result === 'granted') new Notification('AJL reminders ready 🎀', { body:'Smart reminders are enabled while the app is open.' });
+  }
+
+  function pingReminder(r){
+    const msg = `${r.title}\n${formatReminderDate(r)}\n${r.details || ''}`;
+    if (typeof Notification !== 'undefined' && Notification.permission === 'granted') new Notification(`AJL Reminder: ${r.title}`, { body:r.details || formatReminderDate(r) });
+    else alert(msg);
+  }
+
+  function calendarLink(r){
+    const when = reminderDateTime(r);
+    if (!when) return '#';
+    const end = new Date(when.getTime() + 30*60*1000);
+    const fmt = d => d.toISOString().replace(/[-:]/g,'').split('.')[0] + 'Z';
+    const ics = [
+      'BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//AJL Japan Adventure//Smart Reminder//EN','BEGIN:VEVENT',
+      `UID:${r.id || Date.now()}@ajl-japan-adventure`,
+      `DTSTAMP:${fmt(new Date())}`,
+      `DTSTART:${fmt(when)}`,
+      `DTEND:${fmt(end)}`,
+      `SUMMARY:${r.title || 'AJL reminder'}`,
+      `DESCRIPTION:${(r.details || '').replace(/\n/g,' ')}`,
+      'END:VEVENT','END:VCALENDAR'
+    ].join('\n');
+    return URL.createObjectURL(new Blob([ics], { type:'text/calendar' }));
+  }
+
+  return <section className="grid">
+    <Card title="Smart Reminder Centre" icon={<Bell/>}>
+      <p>Shared Firebase reminders for Ash, Jase and Lexie. These show in-app, sync across devices, and can be exported to Apple Calendar as backup.</p>
+      {dueSoon.length ? <div className="note"><b>🚨 Due soon</b>{dueSoon.map(r=><p key={r.id}>{r.priority === 'High' ? '🔴' : '🟡'} {r.title} · {formatReminderDate(r)}</p>)}</div> : <p>No urgent reminders right now.</p>}
+      <button onClick={askNotifications}><Bell size={16}/> Enable browser alerts</button>
+      <p className="tiny">Current notification status: {permission}. iPhone/iPad web notifications depend on Safari/PWA settings, so keep Apple Calendar or iPhone Reminders as the reliable backup.</p>
+    </Card>
+
+    <Card title="Add a Shared Reminder" icon={<PlusCircle/>}>
+      <label>Reminder</label><input placeholder="Fuji guide email, Disney tickets, pack snacks..." value={title} onChange={e=>setTitle(e.target.value)} />
+      <label>Date</label><input type="date" value={date} onChange={e=>setDate(e.target.value)} />
+      <label>Time</label><input type="time" value={time} onChange={e=>setTime(e.target.value)} />
+      <label>Who?</label><select value={person} onChange={e=>setPerson(e.target.value)}><option>Family</option><option>Jase</option><option>Ash</option><option>Lexie</option></select>
+      <label>Priority</label><select value={priority} onChange={e=>setPriority(e.target.value)}><option>High</option><option>Medium</option><option>Low</option></select>
+      <textarea placeholder="Details, address, backup plan, what to pack..." value={details} onChange={e=>setDetails(e.target.value)} />
+      <button onClick={addReminder}>Save synced reminder</button>
+    </Card>
+
+    <Card title="Reminder Timeline" icon={<CalendarDays/>}>
+      {sorted.length===0 ? <p>No reminders yet.</p> : sorted.map(r=>{
+        const status = reminderStatus(r);
+        return <div className="note" key={r.id}>
+          <b>{r.priority === 'High' ? '🔴' : r.priority === 'Medium' ? '🟡' : '🟢'} {r.title}</b>
+          <small><Clock size={13}/> {formatReminderDate(r)} · {r.person || 'Family'} · {status.label}</small>
+          {r.details && <p>{r.details}</p>}
+          <div className="rowWrap">
+            <button onClick={()=>pingReminder(r)}><Bell size={14}/> Test alert</button>
+            <a className="pill" download={`${(r.title || 'reminder').replace(/[^a-z0-9]/gi,'-')}.ics`} href={calendarLink(r)}>Add to Apple Calendar</a>
+            {!r.starter && <button className="danger" onClick={()=>reminders.removeItem(r.id)}><Trash2 size={14}/> Delete</button>}
+          </div>
+        </div>;
+      })}
+    </Card>
   </section>;
 }
 

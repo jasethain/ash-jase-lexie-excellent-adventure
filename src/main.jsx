@@ -596,7 +596,7 @@ function Photos({photos}){
 }
 
 function Emergency(){
-  const lexieCard = 'My name is Lexie. My Dad is Jase and my Mum is Ash. Please call my family. 私の名前はレクシーです。父はジェイス、母はアッシュです。家族に電話してください。';
+  const lexieCard = 'My name is Lexie. My Dad is Jase and my Mum is Ash. Please help me call my family or take me to hotel staff, police, or station staff.\n\n私はレクシーです。お父さんはジェイス、お母さんはアッシュです。家族に連絡するのを手伝ってください。ホテルのスタッフ、警察官、または駅員さんのところへ連れて行ってください。';
   return <section className="grid" id="emergency">
     <Card title="I'm Lost / Help Me" icon={<Shield/>}>
       <div className="lostCard"><h2>私は迷子です</h2><p>My name is Lexie. My Dad is Jase and my Mum is Ash. Please help me call my family or take me to hotel staff, police, or station staff.</p><p><b>Hotel:</b> {HOTEL.name}<br/>{HOTEL.address}</p><p>ホテルまで連れて行ってください。または家族に電話してください。</p></div>

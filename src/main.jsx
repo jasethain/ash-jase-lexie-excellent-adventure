@@ -660,6 +660,7 @@ function JapaneseLearning({progress,rewards,customPhrases}){
   const [japanese,setJapanese] = useState('');
   const [romaji,setRomaji] = useState('');
   const [category,setCategory] = useState('My Phrases');
+  const [lookupHelp,setLookupHelp] = useState('');
   const phraseLookup = {
     'hello': ['こんにちは', 'Konnichiwa'],
     'thank you': ['ありがとう', 'Arigatou'],
@@ -687,12 +688,31 @@ function JapaneseLearning({progress,rewards,customPhrases}){
   function normalisePhrase(value){
     return value.toLowerCase().trim().replace(/[?.!]/g,'').replace(/\s+/g,' ');
   }
+  async function copyForAppleTranslate(){
+    const text = english.trim();
+    if(!text){ setLookupHelp('Type an English phrase first.'); return; }
+    try {
+      await navigator.clipboard?.writeText(text);
+      setLookupHelp('Copied to clipboard. Open Apple Translate, paste it, choose English → Japanese, then paste the result back here.');
+    } catch {
+      setLookupHelp('Copy this phrase, open Apple Translate, choose English → Japanese, then paste the result back here.');
+    }
+  }
+  async function openAppleTranslate(){
+    await copyForAppleTranslate();
+    // iOS does not provide a reliable public website API for Apple Translate.
+    // This tries to open the native app if available, then leaves the copied text ready to paste.
+    window.location.href = 'translate://';
+  }
+  function openAppleTranslateGuide(){
+    window.open('https://support.apple.com/guide/iphone/translate-text-voice-and-conversations-iphd74cb450f/ios', '_blank');
+  }
   function suggestTranslation(){
     const found = phraseLookup[normalisePhrase(english)];
-    if(found){ setJapanese(found[0]); setRomaji(found[1]); return; }
+    if(found){ setJapanese(found[0]); setRomaji(found[1]); setLookupHelp('Offline phrase found. Save it to Lexie’s phrase book when ready.'); return; }
     setJapanese('');
     setRomaji('');
-    alert('I do not have an offline translation for that phrase yet. You can still save the English phrase, then add the Japanese later from Apple Translate or Google Translate.');
+    copyForAppleTranslate();
   }
   async function saveCustomPhrase(){
     if(!english.trim()) return;
@@ -725,11 +745,12 @@ function JapaneseLearning({progress,rewards,customPhrases}){
     <Card title="My Japanese Phrase Builder" icon={<PlusCircle/>}>
       <p>Type a phrase in English. The app will auto-fill common travel phrases offline, or you can save the English and add the Japanese later.</p>
       <input value={english} onChange={e=>setEnglish(e.target.value)} placeholder="Type English phrase, e.g. Where is the toilet?" />
-      <div className="linkRow"><button onClick={suggestTranslation}>Suggest Japanese</button><button onClick={saveCustomPhrase}>Save phrase</button></div>
+      <div className="linkRow"><button onClick={suggestTranslation}>Suggest Japanese</button><button onClick={openAppleTranslate}>Look up in Apple Translate</button><button onClick={saveCustomPhrase}>Save phrase</button></div>
+      {lookupHelp && <div className="lookupHelp"><b>Apple Translate helper</b><p>{lookupHelp}</p><button onClick={openAppleTranslateGuide}>Open Apple Translate instructions</button></div>}
       <input value={japanese} onChange={e=>setJapanese(e.target.value)} placeholder="Japanese translation" />
       <input value={romaji} onChange={e=>setRomaji(e.target.value)} placeholder="Romaji pronunciation" />
       <input value={category} onChange={e=>setCategory(e.target.value)} placeholder="Category, e.g. Food, Train, Disney" />
-      <p className="tiny">For phrases the app does not know, use Apple Translate/Google Translate, then paste the Japanese here so it is saved offline.</p>
+      <p className="tiny">For phrases the app does not know, tap Look up in Apple Translate. The English phrase is copied first so it is ready to paste. Then add the Japanese here so it is saved offline.</p>
     </Card>
     {customPhrases.items.length > 0 && <Card title="Lexie's Saved Phrase Book" icon={<BookOpen/>}>
       {customPhrases.items.map(p=><div className="phraseCard" key={p.id}>

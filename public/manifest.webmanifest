@@ -1,0 +1,9 @@
+{
+  "name": "Ash, Jase & Lexie's Excellent Adventure",
+  "short_name": "Japan Trip",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#fff7fc",
+  "theme_color": "#ff8ec7",
+  "icons": [{ "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml" }]
+}

@@ -1,17 +1,48 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import {
-  MapPin, Mic, Camera, Wallet, BookOpen, Utensils, Train, PlusCircle,
-  Smartphone, Sparkles, Heart, Download, Star, Cloud, CloudOff, Trash2,
-  ShoppingBag, CheckCircle2, Image as ImageIcon, ReceiptText, Bell, Clock, CalendarDays
-} from 'lucide-react';
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
 import {
-  getFirestore, collection, addDoc, deleteDoc, doc, onSnapshot,
-  query, orderBy, serverTimestamp, enableIndexedDbPersistence
+  getFirestore,
+  collection,
+  addDoc,
+  doc,
+  setDoc,
+  updateDoc,
+  deleteDoc,
+  onSnapshot,
+  serverTimestamp,
+  query,
+  orderBy
 } from 'firebase/firestore';
-import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
+import {
+  MapPin,
+  Mic,
+  Camera,
+  Wallet,
+  BookOpen,
+  Utensils,
+  Train,
+  PlusCircle,
+  Smartphone,
+  Sparkles,
+  Heart,
+  Download,
+  Star,
+  Bell,
+  Shield,
+  Palette,
+  Trophy,
+  Languages,
+  FileText,
+  CheckCircle2,
+  Home,
+  PhoneCall,
+  Upload,
+  Trash2,
+  Pencil
+} from 'lucide-react';
 import './styles.css';
 
 const firebaseConfig = {
@@ -23,434 +54,250 @@ const firebaseConfig = {
   appId: '1:241722632776:web:0a7b4ec866641bfd78467d'
 };
 
-const firebaseApp = initializeApp(firebaseConfig);
-const auth = getAuth(firebaseApp);
-const db = getFirestore(firebaseApp);
-const storage = getStorage(firebaseApp);
-
-enableIndexedDbPersistence(db).catch(() => {
-  // Safe to ignore. Another browser tab may already own persistence.
-});
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+const storage = getStorage(app);
 
 const AUD_TO_JPY = 112.905;
 const today = new Date();
+const HOTEL = 'APA Hotel & Resort Tokyo Bay Shiomi, 2-8-6 Shiomi, Koto 135-0052 Tokyo';
+const HOTEL_STATION = 'Shiomi Station';
+
+const assets = {
+  qantas: '/assets/Qantas_E_Ticket_DQ3AT8.pdf',
+  fujiMeeting: '/assets/Tokyo_Meeting_Point.jpg'
+};
 
 const itinerary = [
-  { date:'1 Jul 2026', icon:'✈️', title:'Melbourne to Tokyo Narita', location:'Narita International Airport', apple:'Narita International Airport', notes:'Arrival day. Keep it gentle: bags, Suica/IC card, Apple Maps offline check, simple dinner.' },
-  { date:'2 Jul 2026', icon:'🍲', title:'Sumo Entertainment Show', location:'Tokyo', apple:'Tokyo Sumo show', notes:'Contact operator for Jase/Ash vegetarian meals. Lexie backup: chips, nuggets, noodles or convenience store basics before/after.' },
-  { date:'3 Jul 2026', icon:'🗻', title:'Mount Fuji Full Day Tour', location:'Tokyo Stand T departure point', apple:'Tokyo Station', notes:'8:00 AM departure. Guide info expected around 6 PM the day before. Pack snacks, power bank, jackets and cash.' },
-  { date:'4 Jul 2026', icon:'🌈', title:'Free Day Suggestion', location:'TeamLab Planets / Shibuya / Harajuku', apple:'teamLab Planets TOKYO', notes:'Best spare-time pick: TeamLab Planets, then Shibuya Sky or Harajuku/Kiddy Land.' },
-  { date:'5 Jul 2026', icon:'🎸', title:'Free Day Suggestion', location:'Ochanomizu / Akihabara / Ueno', apple:'Ochanomizu Station', notes:'Jase: guitar stores. Ash/Lexie: kawaii shops, purikura, arcades, simple food stops.' },
-  { date:'6 Jul 2026', icon:'🎀', title:'Sanrio Puroland', location:'Sanrio Puroland, Tama Center', apple:'Sanrio Puroland', notes:'Hello Kitty day. Prioritise parades, character meets, shops, themed desserts and Lexie journal stamps.' },
-  { date:'7 Jul 2026', icon:'🏰', title:'Tokyo Disney Resort', location:'Tokyo Disney Resort', apple:'Tokyo Disney Resort', notes:'Full-day booking. Use Apple Maps to Maihama. Lexie-friendly food hunt: fries, popcorn, nuggets/tenders, pizza, ice cream.' },
-  { date:'8 Jul 2026', icon:'✈️', title:'Return Travel', location:'Tokyo Narita', apple:'Narita International Airport', notes:'Pack the night before. Keep documents, passports, insurance and chargers together.' }
+  { date:'1 Jul 2026', day:'Day 1', icon:'✈️', title:'Melbourne to Tokyo Narita', destination:'Narita International Airport', apple:'Narita International Airport', activity:'Arrival day. Private transfer booked from Narita Airport to Tokyo hotel at 21:30.', lexiePrompt:'What do you think Japan will look, sound and smell like when we arrive?', dadMum:'Dad and Mum check passports, bags, phone roaming and airport transfer.' },
+  { date:'2 Jul 2026', day:'Day 2', icon:'🍲', title:'Sumo Entertainment Show', destination:'Tokyo Sumo show', apple:'Tokyo Sumo show', activity:'Sumo night. Confirm vegetarian meals for Dad/Mum and plain-food backup for Lexie.', lexiePrompt:'What do you think sumo wrestlers do before a match?', dadMum:'Dad/Mum: confirm meal requirements and plan Lexie simple food before or after.' },
+  { date:'3 Jul 2026', day:'Day 3', icon:'🗻', title:'Mount Fuji Full Day Tour', destination:'Tokyo Station Stand T', apple:'Tokyo Station', activity:'8:00 AM departure from Tokyo Stand T. Guide info expected around 6 PM the day before.', lexiePrompt:'Draw what you think Mount Fuji will look like before we see it.', dadMum:'Dad/Mum: leave early, carry snacks, jackets, water, cash and power bank.' },
+  { date:'4 Jul 2026', day:'Day 4', icon:'🌈', title:'Free Day: TeamLab / Shibuya / Harajuku', destination:'teamLab Planets TOKYO', apple:'teamLab Planets TOKYO', activity:'Best spare-time pick: TeamLab Planets, Shibuya Sky, Harajuku and Kiddy Land.', lexiePrompt:'What colours, lights or cute shops are you hoping to see?', dadMum:'Dad/Mum: keep this flexible and use quiet breaks if needed.' },
+  { date:'5 Jul 2026', day:'Day 5', icon:'🎸', title:'Free Day: Guitar Street / Akihabara / Ueno', destination:'Ochanomizu Station', apple:'Ochanomizu Station', activity:'Dad: guitar stores. Mum/Lexie: kawaii shops, purikura, arcades and simple food stops.', lexiePrompt:'What should Dad look for in the guitar shops?', dadMum:'Dad/Mum: decide together whether to split briefly or stay together.' },
+  { date:'6 Jul 2026', day:'Day 6', icon:'🎀', title:'Sanrio Puroland', destination:'Sanrio Puroland', apple:'Sanrio Puroland', activity:'Hello Kitty day. Prioritise parades, character meets, shops, themed desserts and journal stamps.', lexiePrompt:'Which Sanrio character are you most excited to meet, and why?', dadMum:'Dad/Mum: allow lots of photo time and souvenir browsing.' },
+  { date:'7 Jul 2026', day:'Day 7', icon:'🏰', title:'Tokyo Disneyland', destination:'Tokyo Disneyland', apple:'Tokyo Disneyland', activity:'Full Disney day. Use Apple Maps to Maihama. Lexie food hunt: fries, popcorn, nuggets/tenders, pizza, ice cream.', lexiePrompt:'What ride, character or treat are you most excited about at Disney, and why?', dadMum:'Dad/Mum: tickets need to be displayed in the Tokyo Disney Resort App or electronic ticket.' },
+  { date:'8 Jul 2026', day:'Day 8', icon:'✈️', title:'Return Travel', destination:'Narita International Airport', apple:'Narita International Airport', activity:'Private transfer booked from APA Hotel & Resort Tokyo Bay Shiomi to Narita Airport at 15:30.', lexiePrompt:'What memory from Japan do you want to keep forever?', dadMum:'Dad/Mum: pack the night before and keep passports, insurance and chargers together.' }
+];
+
+const routeCards = [
+  { title:'Hotel → Tokyo Disneyland', emoji:'🏰', date:'7 Jul', from:HOTEL, to:'Tokyo Disneyland', baseline:['Walk to Shiomi Station','JR Keiyo Line from Shiomi to Maihama','Walk from Maihama to Tokyo Disneyland'], returnRoute:['Walk to Maihama Station','JR Keiyo Line from Maihama to Shiomi','Walk back to hotel'], timing:'Check Apple Maps morning of travel for exact departure, arrival and platform. Baseline train ride is short because Shiomi and Maihama are both on/near the JR Keiyo route.', docs:'Disney ticket reminder', docHref:null },
+  { title:'Hotel → Sanrio Puroland', emoji:'🎀', date:'6 Jul', from:HOTEL, to:'Sanrio Puroland', baseline:['Walk to Shiomi Station','JR Keiyo Line toward Tokyo','Transfer through central Tokyo toward Shinjuku/Keio route','Travel to Tama-Center area','Walk to Sanrio Puroland'], returnRoute:['Walk to Tama-Center station','Return via Keio/Odakyu and JR connections','Arrive Shiomi Station','Walk to hotel'], timing:'Use Apple Maps live routing for exact train, platform and return timing. This is a longer cross-city day, so check before leaving and again before returning.', docs:'Puroland ticket reminder', docHref:null },
+  { title:'Hotel → Mount Fuji Tour Stand T', emoji:'🗻', date:'3 Jul', from:HOTEL, to:'Tokyo Station Stand T', baseline:['Leave hotel early','Walk to Shiomi Station','JR Keiyo Line to Tokyo Station','Follow station signs to selected Stand T meeting point','Arrive well before 8:00 AM departure'], returnRoute:['Tour returns to Tokyo area','Use Apple Maps from drop-off point to hotel','Return to Shiomi Station','Walk to hotel'], timing:'Tour departs 8:00 AM. Target arrival at meeting area around 7:30 AM. Check guide email around 6 PM the day before.', docs:'Fuji meeting point image', docHref:assets.fujiMeeting },
+  { title:'Hotel → Sumo Show', emoji:'🍲', date:'2 Jul', from:HOTEL, to:'Tokyo Sumo show', baseline:['Open Apple Maps with exact voucher location','Route from APA Hotel Tokyo Bay Shiomi','Check train/walk/taxi options','Leave buffer for dinner/show entry'], returnRoute:['Open Apple Maps from venue','Choose train or taxi based on Lexie energy level','Return to hotel'], timing:'The voucher should be checked for the exact venue address. Once confirmed, Apple Maps will show platforms and live timing.', docs:'Sumo booking details', docHref:null },
+  { title:'Hotel → TeamLab Planets', emoji:'🌈', date:'4 Jul', from:HOTEL, to:'teamLab Planets TOKYO', baseline:['Open Apple Maps route','Likely Tokyo Bay area transit/taxi option','Keep flexible spare-time day'], returnRoute:['Return via Apple Maps from Toyosu area to hotel','Choose taxi if tired'], timing:'Book/confirm entry time before travel. Use live route card for exact departure and platform.', docs:'Free-day suggestion', docHref:null },
+  { title:'Hotel → Ochanomizu Guitar Street', emoji:'🎸', date:'5 Jul', from:HOTEL, to:'Ochanomizu Station', baseline:['Walk to Shiomi Station','JR connection through Tokyo area','Arrive Ochanomizu Station','Walk guitar shops'], returnRoute:['Return from Ochanomizu Station','JR connections back to Shiomi','Walk to hotel'], timing:'Use Apple Maps live routing for exact JR lines, platforms and timing.', docs:'Dad guitar day', docHref:null },
+  { title:'Hotel → Narita Airport', emoji:'✈️', date:'8 Jul', from:HOTEL, to:'Narita International Airport', baseline:['Private transfer from hotel','Pickup at APA Hotel & Resort Tokyo Bay Shiomi','Depart 15:30'], returnRoute:['Not applicable'], timing:'Private transfer pickup is booked for 15:30 from APA Hotel & Resort Tokyo Bay Shiomi.', docs:'Qantas e-ticket', docHref:assets.qantas }
 ];
 
 const places = [
-  { name:'Tokyo Disney Resort', type:'booking', emoji:'🏰', prompts:['Favourite ride?', 'Best snack?', 'Best character or photo spot?', 'Did the fireworks sparkle enough?'], lexieFood:['French fries', 'Popcorn', 'Ice cream', 'Pizza', 'Chicken tenders/nuggets if available'] },
+  { name:'Tokyo Disneyland', type:'booking', emoji:'🏰', prompts:['Favourite ride?', 'Best snack?', 'Best character or photo spot?', 'What did the castle look like?'], lexieFood:['French fries', 'Popcorn', 'Ice cream', 'Pizza', 'Chicken tenders/nuggets if available'] },
   { name:'Sanrio Puroland', type:'booking', emoji:'🎀', prompts:['Favourite Sanrio character?', 'Best shop?', 'Favourite cute dessert?', 'What did you buy or want to buy?'], lexieFood:['Desserts', 'Ice cream', 'Pizza-style options', 'Plain bakery snacks'] },
   { name:'Mount Fuji', type:'booking', emoji:'🗻', prompts:['First reaction seeing Fuji?', 'Best photo?', 'Weather today?', 'What did the mountain look like?'], lexieFood:['Bring backup snacks', 'Plain noodles where available', 'Chips/snacks from convenience stores'] },
   { name:'Sumo Show', type:'booking', emoji:'🍲', prompts:['What was the coolest sumo move?', 'What did the ring ceremony look like?', 'Best photo or video?'], lexieFood:['Eat before if hot pot is not suitable', 'Look for nuggets/chips/noodles nearby'] },
-  { name:'Harajuku', type:'spare time', emoji:'🌸', prompts:['Cutest thing seen?', 'Best shop?', 'Best photo booth?', 'Favourite sweet treat?'], lexieFood:["McDonald's/KFC style backup", 'Crepes without sauce', 'Plain chips', 'Ice cream'] },
-  { name:'Ochanomizu Guitar Street', type:'spare time', emoji:'🎸', prompts:['Best guitar seen?', 'Favourite shop?', 'Did Jase find treasure?'], lexieFood:['Nearby convenience store basics', 'Simple bakery food'] }
+  { name:'Harajuku', type:'spare time', emoji:'🌸', prompts:['Cutest thing seen?', 'Best shop?', 'Best photo booth?', 'Favourite sweet treat?'], lexieFood:['McDonald’s/KFC style backup', 'Crepes without sauce', 'Plain chips', 'Ice cream'] },
+  { name:'Ochanomizu Guitar Street', type:'spare time', emoji:'🎸', prompts:['Best guitar seen?', 'Favourite shop?', 'Did Dad find treasure?'], lexieFood:['Nearby convenience store basics', 'Simple bakery food'] }
 ];
 
-const phrases = [
-  ['Vegetarian', '私はベジタリアンです。', 'Watashi wa bejitarian desu.'],
-  ['No meat or fish', '肉と魚は食べられません。', 'Niku to sakana wa taberaremasen.'],
-  ['No fish stock', '魚のだしは入っていますか？', 'Sakana no dashi wa haitteimasu ka?'],
-  ['Plain noodles please', '具なしの麺をお願いします。', 'Gu nashi no men o onegaishimasu.'],
-  ['Plain pasta, no sauce', 'ソースなしのプレーンパスタをお願いします。', 'Sōsu nashi no purēn pasuta o onegaishimasu.'],
-  ['Chicken nuggets?', 'チキンナゲットはありますか？', 'Chikin nagetto wa arimasu ka?'],
-  ['Hot chips?', 'フライドポテトはありますか？', 'Furaido poteto wa arimasu ka?'],
-  ['Which platform?', '何番線ですか？', 'Nanbansen desu ka?'],
-  ['Please help me', '助けてください。', 'Tasukete kudasai.']
+const japaneseLessons = [
+  { id:'hello', level:'Beginner', en:'Hello', ja:'こんにちは', romaji:'Konnichiwa', reward:'Japanese Hello Star' },
+  { id:'thanks', level:'Beginner', en:'Thank you', ja:'ありがとう', romaji:'Arigatou', reward:'Thank You Star' },
+  { id:'excuse', level:'Travel', en:'Excuse me', ja:'すみません', romaji:'Sumimasen', reward:'Polite Traveller Star' },
+  { id:'platform', level:'Train', en:'Which platform?', ja:'何番線ですか？', romaji:'Nanbansen desu ka?', reward:'Train Helper Star' },
+  { id:'howmuch', level:'Shopping', en:'How much is it?', ja:'いくらですか？', romaji:'Ikura desu ka?', reward:'Shopping Star' },
+  { id:'nuggets', level:'Food', en:'Do you have chicken nuggets?', ja:'チキンナゲットはありますか？', romaji:'Chikin nagetto wa arimasu ka?', reward:'Plain Food Finder Star' },
+  { id:'fries', level:'Food', en:'Do you have hot chips?', ja:'フライドポテトはありますか？', romaji:'Furaido poteto wa arimasu ka?', reward:'Chip Champion Star' },
+  { id:'plainpasta', level:'Food', en:'Plain pasta, no sauce please', ja:'ソースなしのプレーンパスタをお願いします。', romaji:'Sōsu nashi no purēn pasuta o onegaishimasu', reward:'Plain Pasta Star' },
+  { id:'vegetarian', level:'Dad/Mum Food', en:'I am vegetarian', ja:'私はベジタリアンです。', romaji:'Watashi wa bejitarian desu', reward:'Family Helper Star' },
+  { id:'help', level:'Safety', en:'Please help me', ja:'助けてください。', romaji:'Tasukete kudasai', reward:'Safety Star' }
 ];
 
-const starterChecklist = [
-  'Passports and visas checked',
-  'Travel insurance saved offline',
-  'Apple Maps offline Tokyo/Narita/Disney/Puroland/Fuji areas downloaded',
-  'Japanese language pack downloaded in translation app',
-  'ALDI roaming checked before leaving Australia',
-  'Vegetarian meal requests confirmed',
-  'Lexie plain-food snack backup packed'
+const reminderSeeds = [
+  { id:'r-passports', due:'Before travel', title:'Check passports for Dad, Mum and Lexie', detail:'Keep passport photos/scans in Apple Files as backup.', linkLabel:'Add passport details in Emergency tab', link:'#emergency' },
+  { id:'r-insurance', due:'Before travel', title:'Save Qantas travel insurance policy', detail:'Add emergency phone number and policy details to Emergency tab.', linkLabel:'Open Emergency Hub', link:'#emergency' },
+  { id:'r-maps', due:'Before travel', title:'Download Apple Maps offline areas', detail:'Tokyo, Narita, Maihama/Disney, Tama Center/Puroland, Fuji/Kawaguchiko.', linkLabel:'Open Apple Maps setup', link:'#routes' },
+  { id:'r-roaming', due:'Before travel', title:'Turn on ALDI roaming before leaving Australia', detail:'Dad and Mum are on ALDI prepaid SIM cards. Use hotel Wi-Fi where possible.', linkLabel:'Phone setup notes', link:'#phone' },
+  { id:'r-lexie-food', due:'Before travel', title:'Pack Lexie plain-food backup snacks', detail:'Nuggets/chips may not always be nearby. Carry safe snacks for train/tour days.', linkLabel:'Open Lexie Food Mode', link:'#food' },
+  { id:'r-japanese', due:'Before travel', title:'Lexie learns 3 Japanese phrases', detail:'Each phrase earns a reward star in Lexie’s journal.', linkLabel:'Open Japanese Lessons', link:'#learn' },
+  { id:'r-narita-arrival', due:'1 Jul', title:'Narita arrival private transfer 21:30', detail:'Private transfer booked from Narita Airport to Tokyo hotel.', linkLabel:'Open route card', link:'#routes' },
+  { id:'r-sumo-meal', due:'2 Jul', title:'Confirm vegetarian meals for Sumo Show', detail:'Chicken hot pot is not suitable for Dad/Mum vegetarian meals unless alternative is confirmed.', linkLabel:'Open Sumo route/reminder', link:'#routes' },
+  { id:'r-fuji-guide', due:'2 Jul 18:00', title:'Check Fuji guide email around 6 PM', detail:'Guide information may arrive in spam the night before the tour.', linkLabel:'Open Fuji meeting point', link:assets.fujiMeeting },
+  { id:'r-fuji-pack', due:'3 Jul 06:30', title:'Fuji tour bag check', detail:'Power bank, jackets, water, cash, Lexie snacks, booking details.', linkLabel:'Open Fuji meeting point', link:assets.fujiMeeting },
+  { id:'r-puroland', due:'6 Jul', title:'Sanrio Puroland tickets and route check', detail:'Open Apple Maps and check live train platforms before leaving hotel.', linkLabel:'Open route cards', link:'#routes' },
+  { id:'r-disney-app', due:'7 Jul', title:'Tokyo Disney ticket/app check', detail:'Disney confirmation says use Tokyo Disney Resort App or electronic ticket for park entry.', linkLabel:'Open route cards', link:'#routes' },
+  { id:'r-return-transfer', due:'8 Jul 15:30', title:'Private transfer to Narita Airport', detail:'Pickup from APA Hotel & Resort Tokyo Bay Shiomi at 15:30.', linkLabel:'Open Qantas e-ticket', link:assets.qantas }
 ];
 
-
-const starterReminders = [
-  { title:'Check passports and travel insurance', date:'2026-06-15', time:'19:00', person:'Family', priority:'High', details:'Confirm passports, Qantas travel insurance, emergency contacts and PDF copies are saved offline.', starter:true },
-  { title:'Turn on ALDI roaming checks', date:'2026-06-20', time:'18:00', person:'Jase/Ash', priority:'High', details:'Confirm international roaming options before leaving Australia. Download offline maps and translator packs while still on home Wi-Fi.', starter:true },
-  { title:'Download offline Apple Maps areas', date:'2026-06-24', time:'19:00', person:'Family', priority:'High', details:'Download Tokyo, Narita, Maihama/Disney, Tama Center/Puroland and Mount Fuji/Kawaguchiko in Apple Maps.', starter:true },
-  { title:'Pack Lexie plain-food backup', date:'2026-06-30', time:'18:30', person:'Family', priority:'High', details:'Pack simple snacks for Lexie plus vegetarian backup snacks for Fuji and Sumo days.', starter:true },
-  { title:'Departure day airport reminder', date:'2026-07-01', time:'06:00', person:'Family', priority:'High', details:'Check passports, chargers, tickets, insurance, ALDI roaming and Qantas flight details before leaving for Melbourne Airport.', starter:true },
-  { title:'Sumo vegetarian meal check', date:'2026-07-02', time:'10:00', person:'Jase/Ash', priority:'High', details:'Confirm vegetarian meal availability for Sumo Entertainment Show. Plan Lexie simple-food fallback before/after.', starter:true },
-  { title:'Fuji guide info check', date:'2026-07-02', time:'18:00', person:'Family', priority:'High', details:'Fuji operator said guide information should arrive around 6 PM the day before. Check inbox and spam.', starter:true },
-  { title:'Mount Fuji early departure', date:'2026-07-03', time:'06:30', person:'Family', priority:'High', details:'Fuji tour departs 8:00 AM from Stand T. Bring jackets, cash, power bank, snacks and meeting point image.', starter:true },
-  { title:'Sanrio Puroland day plan', date:'2026-07-06', time:'08:00', person:'Family', priority:'Medium', details:'Prioritise Hello Kitty character moments, parades, shops, desserts and Lexie journal stamp.', starter:true },
-  { title:'Disney full-day start', date:'2026-07-07', time:'07:00', person:'Family', priority:'High', details:'Use Apple Maps to Maihama. Pack battery bank, tickets, water, vegetarian plans and Lexie food hunt list.', starter:true },
-  { title:'Pack for return flight', date:'2026-07-07', time:'20:30', person:'Family', priority:'High', details:'Pack passports, souvenirs, chargers, travel documents and airport transfer notes before bed.', starter:true },
-  { title:'Return travel document check', date:'2026-07-08', time:'08:00', person:'Family', priority:'High', details:'Check Qantas return flight, luggage, passports, chargers and airport route to Narita.', starter:true }
+const emergencyContacts = [
+  { name:'Japan Police', number:'110', detail:'Police emergencies in Japan', type:'call' },
+  { name:'Japan Ambulance / Fire', number:'119', detail:'Ambulance or fire emergencies in Japan', type:'call' },
+  { name:'Japan Visitor Hotline', number:'050-3816-2787', detail:'Tourist information and help', type:'call' },
+  { name:'Australian Embassy Tokyo', number:'03-5232-4111', detail:'Australian Embassy switchboard in Tokyo', type:'call' },
+  { name:'Australian Consular Emergency Centre', number:'+61 2 6261 3305', detail:'24-hour Australian Government emergency consular help from overseas', type:'call' },
+  { name:'Hotel', number:'', detail:HOTEL, type:'map', map:HOTEL }
 ];
 
-function reminderDateTime(reminder){
-  if (!reminder?.date) return null;
-  const time = reminder.time || '09:00';
-  const parsed = new Date(`${reminder.date}T${time}:00`);
-  return Number.isNaN(parsed.getTime()) ? null : parsed;
+function useLocal(key, initial){
+  const [value,setValue] = useState(()=>{ try { return JSON.parse(localStorage.getItem(key)) ?? initial } catch { return initial }});
+  useEffect(()=>localStorage.setItem(key, JSON.stringify(value)),[key,value]);
+  return [value,setValue];
 }
 
-function reminderStatus(reminder){
-  const when = reminderDateTime(reminder);
-  if (!when) return { label:'No date', rank:4 };
-  const diffMs = when.getTime() - Date.now();
-  const diffHours = diffMs / (1000 * 60 * 60);
-  if (diffHours < -24) return { label:'Past', rank:5 };
-  if (diffHours < 0) return { label:'Due now', rank:0 };
-  if (diffHours <= 24) return { label:'Due within 24h', rank:1 };
-  if (diffHours <= 72) return { label:'Coming up', rank:2 };
-  return { label:`${Math.ceil(diffHours/24)} days away`, rank:3 };
-}
-
-function formatReminderDate(reminder){
-  const when = reminderDateTime(reminder);
-  if (!when) return 'No time set';
-  return when.toLocaleString([], { weekday:'short', day:'numeric', month:'short', hour:'numeric', minute:'2-digit' });
+function useFirebaseCollection(name, fallback = []){
+  const [items,setItems] = useLocal(`offline-${name}`, fallback);
+  const [ready,setReady] = useState(false);
+  useEffect(()=>{
+    let unsubAuth = onAuthStateChanged(auth, async user => {
+      try{
+        if(!user) await signInAnonymously(auth);
+        const q = query(collection(db, name), orderBy('createdAt','desc'));
+        const unsub = onSnapshot(q, snap => {
+          const rows = snap.docs.map(d=>({id:d.id,...d.data()}));
+          setItems(rows); setReady(true);
+        });
+        unsubAuth = () => unsub();
+      } catch(e){ console.warn('Firebase sync unavailable, local fallback active.', e); setReady(false); }
+    });
+    return ()=>{ if(typeof unsubAuth === 'function') unsubAuth(); };
+  },[name]);
+  async function add(item){
+    const local = { id:`local-${Date.now()}`, ...item, createdAt: Date.now() };
+    setItems(prev=>[local,...prev]);
+    try { await addDoc(collection(db, name), { ...item, createdAt: serverTimestamp() }); } catch(e){ console.warn(e); }
+  }
+  async function patch(id, changes){
+    setItems(prev=>prev.map(x=>x.id===id?{...x,...changes}:x));
+    try { if(!String(id).startsWith('local-')) await updateDoc(doc(db,name,id), changes); } catch(e){ console.warn(e); }
+  }
+  async function remove(id){
+    setItems(prev=>prev.filter(x=>x.id!==id));
+    try { if(!String(id).startsWith('local-')) await deleteDoc(doc(db,name,id)); } catch(e){ console.warn(e); }
+  }
+  return {items, add, patch, remove, ready};
 }
 
 function say(text){
   if(!('speechSynthesis' in window)) return alert('Speech is not available on this device/browser.');
-  const u = new SpeechSynthesisUtterance(text);
-  u.lang = 'ja-JP';
-  speechSynthesis.speak(u);
+  const u = new SpeechSynthesisUtterance(text); u.lang='ja-JP'; speechSynthesis.cancel(); speechSynthesis.speak(u);
 }
-
-function appleMaps(query){
-  return `https://maps.apple.com/?q=${encodeURIComponent(query)}`;
-}
-
-function stampDate(value){
-  if (!value) return '';
-  if (value.seconds) return new Date(value.seconds * 1000).toLocaleString();
-  return String(value);
-}
-
-function useFirebaseAuth(){
-  const [user,setUser] = useState(null);
-  const [status,setStatus] = useState('Connecting');
-
-  useEffect(() => {
-    const unsub = onAuthStateChanged(auth, async (currentUser) => {
-      if (currentUser) {
-        setUser(currentUser);
-        setStatus('Synced');
-        return;
-      }
-      try {
-        setStatus('Signing in');
-        await signInAnonymously(auth);
-      } catch (error) {
-        console.error(error);
-        setStatus('Offline/local only');
-      }
-    });
-    return unsub;
-  }, []);
-
-  return { user, status };
-}
-
-function useSyncedCollection(name, seed = []){
-  const [items,setItems] = useState(seed);
-  const [loading,setLoading] = useState(true);
-  const [error,setError] = useState('');
-
-  useEffect(() => {
-    const q = query(collection(db, name), orderBy('createdAt', 'desc'));
-    const unsub = onSnapshot(q, (snap) => {
-      const rows = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      setItems(rows.length ? rows : seed);
-      setLoading(false);
-      setError('');
-    }, (err) => {
-      console.error(err);
-      setError(err.message || 'Sync error');
-      setLoading(false);
-    });
-    return unsub;
-  }, [name]);
-
-  async function addItem(data){
-    await addDoc(collection(db, name), { ...data, createdAt: serverTimestamp() });
-  }
-
-  async function removeItem(id){
-    await deleteDoc(doc(db, name, id));
-  }
-
-  return { items, loading, error, addItem, removeItem };
-}
-
-async function uploadTripFile(file, folder='uploads'){
-  if (!file) return null;
-  const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
-  const path = `${folder}/${Date.now()}-${safeName}`;
-  const fileRef = ref(storage, path);
-  await uploadBytes(fileRef, file);
-  return await getDownloadURL(fileRef);
-}
+function appleMaps(query){ return `https://maps.apple.com/?q=${encodeURIComponent(query)}`; }
+function appleRoute(from,to){ return `https://maps.apple.com/?saddr=${encodeURIComponent(from)}&daddr=${encodeURIComponent(to)}&dirflg=r`; }
+function callLink(number){ return `tel:${number.replace(/[^+0-9]/g,'')}`; }
+function stampDate(){ return new Date().toLocaleString(); }
 
 function App(){
-  const { user, status } = useFirebaseAuth();
   const [tab,setTab] = useState('home');
-  const [aud,setAud] = useState(50);
-  const [jpy,setJpy] = useState(Math.round(50*AUD_TO_JPY));
-  const nextTrip = Math.ceil((new Date('2026-07-01T09:00:00')-today)/(1000*60*60*24));
-
-  const journal = useSyncedCollection('journalEntries');
-  const notes = useSyncedCollection('tripNotes');
-  const checklist = useSyncedCollection('checklistItems', starterChecklist.map((text, idx) => ({ id:`starter-${idx}`, text, done:false, starter:true })));
-  const shopping = useSyncedCollection('shoppingItems');
-  const expenses = useSyncedCollection('expenses');
-  const photos = useSyncedCollection('tripPhotos');
-  const reminders = useSyncedCollection('smartReminders', starterReminders);
-
+  const journal = useFirebaseCollection('lexieJournal');
+  const notes = useFirebaseCollection('sharedNotes');
+  const rewards = useFirebaseCollection('lexieRewards');
+  const reminders = useFirebaseCollection('smartReminders', reminderSeeds);
+  const photos = useFirebaseCollection('tripPhotos');
+  const drawings = useFirebaseCollection('lexieDrawings');
+  const [aud,setAud] = useState(50); const [jpy,setJpy] = useState(Math.round(50*AUD_TO_JPY));
+  const nextTrip = Math.ceil((new Date('2026-07-01T09:00:00+10:00')-today)/(1000*60*60*24));
   const tabs = [
-    ['home','Home','🎀'],['itinerary','Trip','🗓️'],['maps','Apple Maps','🗺️'],
-    ['journal','Lexie Journal','📖'],['reminders','Reminders','⏰'],['food','Food','🍟'],['photos','Photos','📸'],
-    ['lists','Lists','☑️'],['money','Money','💴'],['translate','Translator','🎤'],
-    ['phone','Apple Devices','📱'],['add','Add Info','➕']
+    ['home','Home','🎀'],['reminders','Reminders','🔔'],['routes','Routes','🚆'],['journal','Lexie Journal','📖'],['rewards','Rewards','⭐'],['learn','Japanese','🇯🇵'],['emergency','Emergency','🚨'],['food','Food','🍟'],['translate','Translator','🎤'],['money','Currency','💴'],['phone','Apple Devices','📱'],['add','Add Info','➕']
   ];
-
+  useEffect(()=>{
+    if(location.hash){ const id=location.hash.replace('#',''); setTab(id); }
+  },[]);
+  const starsToday = rewards.items.filter(r => new Date(r.date || r.createdAt || Date.now()).toDateString() === new Date().toDateString()).length;
   return <div className="app">
     <div className="sakura"></div><div className="bows"></div>
-    <header>
-      <div className="kitty">🎀</div>
-      <div>
-        <h1>Ash, Jase & Lexie's Excellent Adventure</h1>
-        <p>Hello Kitty inspired Japan companion, synced with Firebase for iPhone/iPad</p>
-      </div>
-      <div className="syncBadge" title={user?.uid || 'No user yet'}>{status === 'Synced' ? <Cloud size={18}/> : <CloudOff size={18}/>} {status}</div>
-    </header>
-    <nav>{tabs.map(t=><button key={t[0]} onClick={()=>setTab(t[0])} className={tab===t[0]?'active':''}><span>{t[2]}</span>{t[1]}</button>)}</nav>
+    <header><div className="kitty">🎀</div><div><h1>Ash, Jase & Lexie's Excellent Adventure</h1><p>Hello Kitty inspired Japan companion for Dad, Mum and Lexie</p></div></header>
+    <nav>{tabs.map(t=><button key={t[0]} onClick={()=>{setTab(t[0]); history.replaceState(null,'',`#${t[0]}`)}} className={tab===t[0]?'active':''}><span>{t[2]}</span>{t[1]}</button>)}</nav>
     <main>
-      {tab==='home' && <Home nextTrip={nextTrip} journal={journal.items} notes={notes.items} photos={photos.items} checklist={checklist.items} expenses={expenses.items} reminders={reminders.items} />}
-      {tab==='itinerary' && <Timeline />}
-      {tab==='maps' && <Maps />}
-      {tab==='journal' && <Journal journal={journal} />}
-      {tab==='reminders' && <SmartReminders reminders={reminders} />}
+      {tab==='home' && <HomeScreen nextTrip={nextTrip} starsToday={starsToday} reminders={reminders.items} photos={photos.items} />}
+      {tab==='reminders' && <Reminders reminders={reminders} />}
+      {tab==='routes' && <Routes />}
+      {tab==='journal' && <LexieJournal journal={journal} rewards={rewards} photos={photos} drawings={drawings} />}
+      {tab==='rewards' && <Rewards rewards={rewards} journal={journal.items} photos={photos.items} drawings={drawings.items} />}
+      {tab==='learn' && <JapaneseLessons rewards={rewards} />}
+      {tab==='emergency' && <Emergency />}
       {tab==='food' && <Food />}
-      {tab==='photos' && <Photos photos={photos} />}
-      {tab==='lists' && <Lists checklist={checklist} shopping={shopping} />}
       {tab==='translate' && <Translator />}
-      {tab==='money' && <Currency aud={aud} setAud={setAud} jpy={jpy} setJpy={setJpy} expenses={expenses} />}
+      {tab==='money' && <Currency aud={aud} setAud={setAud} jpy={jpy} setJpy={setJpy} />}
       {tab==='phone' && <Phone />}
-      {tab==='add' && <AddInfo notes={notes} />}
+      {tab==='add' && <AddInfo notes={notes} photos={photos} />}
     </main>
-  </div>;
+  </div>
 }
-
 function Card({title,icon,children}){return <article className="card"><h2>{icon}{title}</h2>{children}</article>}
-
-function Home({ nextTrip, journal, notes, photos, checklist, expenses, reminders }){
-  const totalJpy = expenses.reduce((sum, e) => sum + Number(e.jpy || 0), 0);
-  const nextItem = itinerary.find(x => new Date(`${x.date.replace('Jul','July')} 2026`).getTime() >= Date.now()) || itinerary[0];
-  const nextReminder = [...reminders].filter(r => reminderStatus(r).rank < 5).sort((a,b)=>(reminderDateTime(a)?.getTime()||0)-(reminderDateTime(b)?.getTime()||0))[0];
+function HomeScreen({nextTrip,starsToday,reminders,photos}){
+  const openReminders = reminders.filter(r=>!r.done).slice(0,5);
   return <section className="grid">
-    <Card title="Tokyo Countdown" icon={<Sparkles/>}><div className="big">{nextTrip>0?nextTrip:'Trip time!'} days</div><p>Pack passports, insurance, chargers, Apple Maps offline areas and Lexie's snack backup.</p></Card>
-    <Card title="Trip Control Centre" icon={<Heart/>}><p><b>Next adventure:</b> {nextItem.icon} {nextItem.title}</p>{nextReminder && <p><b>Next reminder:</b> ⏰ {nextReminder.title} · {formatReminderDate(nextReminder)}</p>}<p><b>Shared notes:</b> {notes.length}</p><p><b>Journal stamps:</b> {journal.length}</p><p><b>Photos:</b> {photos.length}</p><p><b>Checklist items:</b> {checklist.length}</p><p><b>Smart reminders:</b> {reminders.length}</p><p><b>Spend tracked:</b> ¥{totalJpy.toLocaleString()} / ${(totalJpy/AUD_TO_JPY).toFixed(2)} AUD</p></Card>
-    <Card title="Booking Wallet" icon={<Download/>}><a href="/assets/Qantas_E_Ticket_DQ3AT8.pdf">Open Qantas e-ticket PDF</a><a href="/assets/Tokyo_Meeting_Point.jpg">Open Fuji meeting point image</a></Card>
-  </section>;
+    <Card title="Tokyo Countdown" icon={<Sparkles/>}><div className="big">{nextTrip>0?nextTrip:'Trip time!'} days</div><p>Hotel base: APA Hotel & Resort Tokyo Bay Shiomi.</p><div className="stampRow"><span>✈️</span><span>🍲</span><span>🗻</span><span>🎀</span><span>🏰</span></div></Card>
+    <Card title="Lexie’s Stars Today" icon={<Trophy/>}><div className="big">{starsToday}/5</div><p>Daily stars can be earned through journal writing, photos, drawings, phrase learning and adventure prompts.</p></Card>
+    <Card title="Next Smart Reminders" icon={<Bell/>}>{openReminders.length===0?<p>All reminders ticked. Sparkly calm restored.</p>:openReminders.map(r=><div className="note" key={r.id}><b>{r.title}</b><small>{r.due}</small><p>{r.detail}</p></div>)}</Card>
+    <Card title="Booking Wallet" icon={<Download/>}><a href={assets.qantas}>Open Qantas e-ticket PDF</a><a href={assets.fujiMeeting}>Open Fuji meeting point image</a></Card>
+    <Card title="Latest Photos" icon={<Camera/>}>{photos.slice(0,3).map(p=><img key={p.id} alt={p.title||'Trip upload'} src={p.url} style={{width:'100%',borderRadius:16,marginBottom:10}} />)}{photos.length===0 && <p>No shared photos yet.</p>}</Card>
+  </section>
 }
-
-function Timeline(){return <section className="timeline">{itinerary.map(i=><article className="event" key={i.title}><div className="date">{i.date}</div><div className="bubble">{i.icon}</div><div><h2>{i.title}</h2><p><MapPin size={16}/> {i.location}</p><p>{i.notes}</p><a className="pill" href={appleMaps(i.apple)} target="_blank">Open in Apple Maps</a></div></article>)}</section>}
-
-function Maps(){return <section className="grid"><Card title="Apple Maps Setup" icon={<MapPin/>}><ol><li>Open Apple Maps before the trip.</li><li>Search Tokyo and choose Download Map.</li><li>Also download Narita, Maihama/Disney, Tama Center/Puroland and Mount Fuji/Kawaguchiko.</li><li>Save hotel, airport, Disney, Puroland and Fuji meeting point as favourites.</li></ol></Card>{itinerary.filter(x=>x.apple).map(i=><Card key={i.title} title={i.title} icon={<Train/>}><p>{i.location}</p><a className="pill" target="_blank" href={appleMaps(i.apple)}>Navigate with Apple Maps</a><p className="tiny">Offline maps are managed inside Apple Maps, not bundled in this app.</p></Card>)}</section>}
-
-function Journal({ journal }){
-  const [place,setPlace]=useState(places[0].name);
-  const [mood,setMood]=useState('😊 Happy');
-  const [text,setText]=useState('');
-  const [author,setAuthor]=useState('Lexie');
-  const [file,setFile]=useState(null);
-  const [busy,setBusy]=useState(false);
-  const current=places.find(p=>p.name===place);
-
-  async function add(){
-    setBusy(true);
-    try {
-      const imageUrl = file ? await uploadTripFile(file, 'journal') : '';
-      await journal.addItem({ place, mood, text, author, imageUrl, emoji:current.emoji });
-      setText(''); setFile(null);
-    } finally { setBusy(false); }
-  }
-
+function Reminders({reminders}){
+  const [title,setTitle] = useState(''); const [due,setDue] = useState(''); const [detail,setDetail] = useState(''); const [link,setLink] = useState('');
+  const items = reminders.items.length ? reminders.items : reminderSeeds;
+  async function addCustom(){ if(!title.trim()) return; await reminders.add({title,due:due||'Custom',detail,link,linkLabel:link?'Open link':'',done:false}); setTitle(''); setDue(''); setDetail(''); setLink(''); }
+  async function seedDefaults(){ for(const r of reminderSeeds){ await setDoc(doc(db,'smartReminders',r.id), {...r, done:false, createdAt:serverTimestamp()}, {merge:true}); } }
   return <section className="grid">
-    <Card title="Lexie’s Location-Aware Journal" icon={<BookOpen/>}>
-      <label>Who is adding this?</label><select value={author} onChange={e=>setAuthor(e.target.value)}><option>Lexie</option><option>Ash</option><option>Jase</option></select>
-      <label>Where are you?</label><select value={place} onChange={e=>setPlace(e.target.value)}>{places.map(p=><option key={p.name}>{p.name}</option>)}</select>
-      <div className="placeHero">{current.emoji} {current.name}</div><p>Prompts:</p><ul>{current.prompts.map(p=><li key={p}>{p}</li>)}</ul>
-      <label>Mood</label><select value={mood} onChange={e=>setMood(e.target.value)}><option>😊 Happy</option><option>😍 Excited</option><option>😮 Amazed</option><option>🥰 Loved it</option><option>😴 Tired</option></select>
-      <textarea placeholder="Lexie's memory, or Jase/Ash can type it for her..." value={text} onChange={e=>setText(e.target.value)} />
-      <label>Add photo</label><input type="file" accept="image/*" onChange={e=>setFile(e.target.files?.[0] || null)} />
-      <button disabled={busy} onClick={add}>{busy ? 'Saving...' : 'Add synced journal stamp'}</button>
-    </Card>
-    <Card title="Treasure Hunt" icon={<Star/>}><ul className="hunt"><li>📸 Find Hello Kitty</li><li>🚆 Ride a Tokyo train</li><li>🍦 Try Japanese ice cream</li><li>🏰 Find Mickey</li><li>🗻 Spot Mount Fuji</li><li>🎀 Take a cute shop photo</li></ul></Card>
-    <Card title="Synced Journal Entries" icon={<Sparkles/>}>{journal.items.length===0?<p>No entries yet.</p>:journal.items.map(e=><div className="note" key={e.id}><b>{e.emoji} {e.place}</b><small>{stampDate(e.createdAt)} · {e.mood} · {e.author || 'Family'}</small>{e.imageUrl && <img className="photoThumb" src={e.imageUrl} alt="Journal"/>}<p>{e.text || 'Quick stamp added.'}</p>{!e.starter && <button className="danger" onClick={()=>journal.removeItem(e.id)}><Trash2 size={14}/> Delete</button>}</div>)}</Card>
-  </section>;
+    <Card title="Smart Reminders With Tick Boxes" icon={<Bell/>}><p>Tick boxes sync across Dad, Mum and Lexie’s devices. Items open documents or route cards where relevant.</p><button onClick={seedDefaults}>Refresh default reminder list</button>{items.map(r=><div className="note reminder" key={r.id}><label style={{display:'flex',gap:10,alignItems:'flex-start'}}><input type="checkbox" checked={!!r.done} onChange={e=>reminders.patch(r.id,{done:e.target.checked,doneAt:e.target.checked?stampDate():''})}/><span><b style={{textDecoration:r.done?'line-through':'none'}}>{r.title}</b><small>{r.due}{r.doneAt?` · done ${r.doneAt}`:''}</small><p>{r.detail}</p>{r.link && <a className="pill" href={r.link} target={r.link.startsWith('#')?'_self':'_blank'}>{r.linkLabel || 'Open related document'}</a>}</span></label></div>)}</Card>
+    <Card title="Add Custom Reminder" icon={<PlusCircle/>}><input placeholder="Reminder title" value={title} onChange={e=>setTitle(e.target.value)}/><input placeholder="Due date/time" value={due} onChange={e=>setDue(e.target.value)}/><textarea placeholder="Details" value={detail} onChange={e=>setDetail(e.target.value)}/><input placeholder="Optional document, route or web link" value={link} onChange={e=>setLink(e.target.value)}/><button onClick={addCustom}>Add reminder</button></Card>
+  </section>
 }
-
-
-function SmartReminders({ reminders }){
-  const [title,setTitle] = useState('');
-  const [date,setDate] = useState('2026-07-01');
-  const [time,setTime] = useState('09:00');
-  const [person,setPerson] = useState('Family');
-  const [priority,setPriority] = useState('Medium');
-  const [details,setDetails] = useState('');
-  const [permission,setPermission] = useState(typeof Notification === 'undefined' ? 'unsupported' : Notification.permission);
-
-  const sorted = useMemo(() => [...reminders.items].sort((a,b) => {
-    const sa = reminderStatus(a); const sb = reminderStatus(b);
-    if (sa.rank !== sb.rank) return sa.rank - sb.rank;
-    return (reminderDateTime(a)?.getTime() || 0) - (reminderDateTime(b)?.getTime() || 0);
-  }), [reminders.items]);
-
-  const dueSoon = sorted.filter(r => reminderStatus(r).rank <= 1);
-
-  async function addReminder(){
-    if (!title.trim()) return alert('Add a reminder title first.');
-    await reminders.addItem({ title, date, time, person, priority, details, done:false });
-    setTitle(''); setDetails('');
-  }
-
-  async function askNotifications(){
-    if (typeof Notification === 'undefined') {
-      alert('Browser notifications are not supported on this device. Use Add to Calendar / iPhone Reminders as backup.');
-      return;
-    }
-    const result = await Notification.requestPermission();
-    setPermission(result);
-    if (result === 'granted') new Notification('AJL reminders ready 🎀', { body:'Smart reminders are enabled while the app is open.' });
-  }
-
-  function pingReminder(r){
-    const msg = `${r.title}\n${formatReminderDate(r)}\n${r.details || ''}`;
-    if (typeof Notification !== 'undefined' && Notification.permission === 'granted') new Notification(`AJL Reminder: ${r.title}`, { body:r.details || formatReminderDate(r) });
-    else alert(msg);
-  }
-
-  function calendarLink(r){
-    const when = reminderDateTime(r);
-    if (!when) return '#';
-    const end = new Date(when.getTime() + 30*60*1000);
-    const fmt = d => d.toISOString().replace(/[-:]/g,'').split('.')[0] + 'Z';
-    const ics = [
-      'BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//AJL Japan Adventure//Smart Reminder//EN','BEGIN:VEVENT',
-      `UID:${r.id || Date.now()}@ajl-japan-adventure`,
-      `DTSTAMP:${fmt(new Date())}`,
-      `DTSTART:${fmt(when)}`,
-      `DTEND:${fmt(end)}`,
-      `SUMMARY:${r.title || 'AJL reminder'}`,
-      `DESCRIPTION:${(r.details || '').replace(/\n/g,' ')}`,
-      'END:VEVENT','END:VCALENDAR'
-    ].join('\n');
-    return URL.createObjectURL(new Blob([ics], { type:'text/calendar' }));
-  }
-
+function Routes(){return <section className="grid"><Card title="Travel Route Centre" icon={<Train/>}><p>Start point for route cards: <b>{HOTEL}</b>. Platform and departure/arrival times should be checked live in Apple Maps on the day because train platforms and disruptions can change.</p><a className="pill" href={appleMaps(HOTEL)} target="_blank">Open hotel in Apple Maps</a></Card>{routeCards.map(r=><Card key={r.title} title={`${r.emoji} ${r.title}`} icon={<MapPin/>}><p><b>Date:</b> {r.date}</p><p><b>From:</b> {r.from}</p><p><b>To:</b> {r.to}</p><h3>Outbound plan</h3><ol>{r.baseline.map(x=><li key={x}>{x}</li>)}</ol><h3>Return plan</h3><ol>{r.returnRoute.map(x=><li key={x}>{x}</li>)}</ol><p><b>Departure/arrival/platform:</b> {r.timing}</p><div className="stampRow"><a className="pill" target="_blank" href={appleRoute(r.from,r.to)}>Live Apple Maps route</a>{r.docHref && <a className="pill" target="_blank" href={r.docHref}>{r.docs}</a>}<a className="pill" target="_blank" href={appleRoute(r.to,r.from)}>Return route</a></div></Card>)}</section>}
+function LexieJournal({journal,rewards,photos,drawings}){
+  const [selected,setSelected] = useState('pre');
+  const selectedDay = selected==='pre' ? null : itinerary.find(i=>i.day===selected);
+  const pages = [{key:'pre',label:'Before We Go',icon:'🎒'}, ...itinerary.map(i=>({key:i.day,label:`${i.day}: ${i.title}`,icon:i.icon}))];
   return <section className="grid">
-    <Card title="Smart Reminder Centre" icon={<Bell/>}>
-      <p>Shared Firebase reminders for Ash, Jase and Lexie. These show in-app, sync across devices, and can be exported to Apple Calendar as backup.</p>
-      {dueSoon.length ? <div className="note"><b>🚨 Due soon</b>{dueSoon.map(r=><p key={r.id}>{r.priority === 'High' ? '🔴' : '🟡'} {r.title} · {formatReminderDate(r)}</p>)}</div> : <p>No urgent reminders right now.</p>}
-      <button onClick={askNotifications}><Bell size={16}/> Enable browser alerts</button>
-      <p className="tiny">Current notification status: {permission}. iPhone/iPad web notifications depend on Safari/PWA settings, so keep Apple Calendar or iPhone Reminders as the reliable backup.</p>
-    </Card>
-
-    <Card title="Add a Shared Reminder" icon={<PlusCircle/>}>
-      <label>Reminder</label><input placeholder="Fuji guide email, Disney tickets, pack snacks..." value={title} onChange={e=>setTitle(e.target.value)} />
-      <label>Date</label><input type="date" value={date} onChange={e=>setDate(e.target.value)} />
-      <label>Time</label><input type="time" value={time} onChange={e=>setTime(e.target.value)} />
-      <label>Who?</label><select value={person} onChange={e=>setPerson(e.target.value)}><option>Family</option><option>Jase</option><option>Ash</option><option>Lexie</option></select>
-      <label>Priority</label><select value={priority} onChange={e=>setPriority(e.target.value)}><option>High</option><option>Medium</option><option>Low</option></select>
-      <textarea placeholder="Details, address, backup plan, what to pack..." value={details} onChange={e=>setDetails(e.target.value)} />
-      <button onClick={addReminder}>Save synced reminder</button>
-    </Card>
-
-    <Card title="Reminder Timeline" icon={<CalendarDays/>}>
-      {sorted.length===0 ? <p>No reminders yet.</p> : sorted.map(r=>{
-        const status = reminderStatus(r);
-        return <div className="note" key={r.id}>
-          <b>{r.priority === 'High' ? '🔴' : r.priority === 'Medium' ? '🟡' : '🟢'} {r.title}</b>
-          <small><Clock size={13}/> {formatReminderDate(r)} · {r.person || 'Family'} · {status.label}</small>
-          {r.details && <p>{r.details}</p>}
-          <div className="rowWrap">
-            <button onClick={()=>pingReminder(r)}><Bell size={14}/> Test alert</button>
-            <a className="pill" download={`${(r.title || 'reminder').replace(/[^a-z0-9]/gi,'-')}.ics`} href={calendarLink(r)}>Add to Apple Calendar</a>
-            {!r.starter && <button className="danger" onClick={()=>reminders.removeItem(r.id)}><Trash2 size={14}/> Delete</button>}
-          </div>
-        </div>;
-      })}
-    </Card>
-  </section>;
+    <Card title="Lexie’s Japan Adventure Book" icon={<BookOpen/>}><p>This is Lexie’s space. Dad or Mum can help type, upload photos, or save drawings from finger/Apple Pencil.</p><select value={selected} onChange={e=>setSelected(e.target.value)}>{pages.map(p=><option key={p.key} value={p.key}>{p.icon} {p.label}</option>)}</select>{selected==='pre'?<PreTravelPage journal={journal} rewards={rewards}/>:<DailyJournalPage day={selectedDay} journal={journal} rewards={rewards}/>}</Card>
+    <DrawingStudio drawings={drawings} rewards={rewards} page={selected}/>
+    <PhotoUploader photos={photos} rewards={rewards} page={selected}/>
+    <Card title="Saved Journal Pages" icon={<Sparkles/>}>{journal.items.length===0?<p>No journal entries yet.</p>:journal.items.map(e=><div className="note" key={e.id}><b>{e.emoji || '📖'} {e.page || e.place || 'Journal'}</b><small>{e.date || ''} · {e.mood || ''}</small><p>{e.text}</p>{e.why && <p><b>Why:</b> {e.why}</p>}</div>)}</Card>
+  </section>
 }
-
-function Food(){return <section className="grid"><Card title="Jase & Ash Vegetarian Mode" icon={<Utensils/>}><p>Watch for hidden dashi, fish stock, chicken broth and meat extracts.</p><ul><li>T’s TanTan near Tokyo Station</li><li>Ain Soph locations</li><li>Vegetarian curry where confirmed</li><li>Carry snacks for Fuji and Sumo days</li></ul></Card><Card title="Lexie Plain-Food Mode" icon={<Utensils/>}><p>Lexie is not vegetarian. She likes basic food with no sauce or strong flavours.</p><ul><li>Chicken nuggets</li><li>Hot chips/fries</li><li>Chicken noodles</li><li>Plain pasta with no sauce</li><li>Pizza, toast, ice cream, pancakes</li></ul></Card>{places.map(p=><Card key={p.name} title={`${p.emoji} ${p.name}`} icon={<MapPin/>}><p><b>Lexie-friendly ideas:</b></p><ul>{p.lexieFood.map(f=><li key={f}>{f}</li>)}</ul><a className="pill" target="_blank" href={appleMaps(`${p.name} McDonald's KFC fries noodles`) }>Find simple food nearby</a></Card>)}</section>}
-
-function Photos({ photos }){
-  const [file,setFile] = useState(null);
-  const [caption,setCaption] = useState('');
-  const [author,setAuthor] = useState('Jase');
-  const [busy,setBusy] = useState(false);
-  async function addPhoto(){
-    if (!file) return alert('Choose a photo first.');
-    setBusy(true);
-    try {
-      const imageUrl = await uploadTripFile(file, 'photos');
-      await photos.addItem({ imageUrl, caption, author });
-      setFile(null); setCaption('');
-    } finally { setBusy(false); }
-  }
-  return <section className="grid">
-    <Card title="Shared Photo Scrapbook" icon={<Camera/>}><label>Who is uploading?</label><select value={author} onChange={e=>setAuthor(e.target.value)}><option>Jase</option><option>Ash</option><option>Lexie</option></select><input type="file" accept="image/*" onChange={e=>setFile(e.target.files?.[0] || null)} /><input placeholder="Caption" value={caption} onChange={e=>setCaption(e.target.value)} /><button disabled={busy} onClick={addPhoto}>{busy ? 'Uploading...' : 'Upload photo'}</button></Card>
-    <Card title="Family Photo Wall" icon={<ImageIcon/>}>{photos.items.length===0?<p>No photos yet.</p>:<div className="photoGrid">{photos.items.map(p=><div className="photoCard" key={p.id}><img src={p.imageUrl} alt={p.caption || 'Trip'} /><b>{p.caption || 'Trip photo'}</b><small>{p.author || 'Family'} · {stampDate(p.createdAt)}</small><button className="danger" onClick={()=>photos.removeItem(p.id)}><Trash2 size={14}/> Delete</button></div>)}</div>}</Card>
-  </section>;
+function PreTravelPage({journal,rewards}){
+  const [excited,setExcited]=useState(''); const [why,setWhy]=useState(''); const [worried,setWorried]=useState(''); const [plan,setPlan]=useState('');
+  async function save(){ await journal.add({page:'Before We Go', emoji:'🎒', text:excited, why, worried, plan, mood:'pre-travel', date:stampDate()}); await rewards.add({type:'journal', title:'Pre-travel journal star', detail:'Lexie wrote before the trip', date:stampDate(), value:1}); setExcited(''); setWhy(''); setWorried(''); setPlan(''); }
+  return <div><h3>🎀 Before We Leave</h3><label>What are you looking forward to?</label><textarea value={excited} onChange={e=>setExcited(e.target.value)} placeholder="Example: I am excited about Disney, Hello Kitty, vending machines, trains..."/><label>Why are you looking forward to it?</label><textarea value={why} onChange={e=>setWhy(e.target.value)} placeholder="Because..."/><label>Is there anything you feel worried about?</label><textarea value={worried} onChange={e=>setWorried(e.target.value)} placeholder="Food, crowds, plane, getting lost, not knowing Japanese..."/><label>My confidence plan with Mum and Dad</label><textarea value={plan} onChange={e=>setPlan(e.target.value)} placeholder="I can ask Mum or Dad, use the translator, take a quiet break, have a snack, look at the route card..."/><button onClick={save}>Save pre-travel page and earn ⭐</button><div className="note"><b>Confidence Helper</b><p>Small plans help big adventures feel manageable: know where you are going, practise simple phrases, pack familiar snacks, and decide what to do if a place feels busy.</p></div></div>
 }
-
-function Lists({ checklist, shopping }){
-  return <section className="grid"><Checklist collection={checklist}/><Shopping collection={shopping}/></section>;
+function DailyJournalPage({day,journal,rewards}){
+  const [text,setText]=useState(''); const [why,setWhy]=useState(''); const [mood,setMood]=useState('😊 Happy');
+  if(!day) return null;
+  async function save(){ await journal.add({page:`${day.day}: ${day.title}`, emoji:day.icon, text, why, mood, date:stampDate()}); await rewards.add({type:'journal', title:`${day.day} journal star`, detail:day.title, date:stampDate(), value:1}); setText(''); setWhy(''); }
+  return <div><h3>{day.icon} {day.day}: {day.title}</h3><p>{day.activity}</p><label>Lexie prompt</label><textarea value={text} onChange={e=>setText(e.target.value)} placeholder={day.lexiePrompt}/><label>Why is this special or interesting?</label><textarea value={why} onChange={e=>setWhy(e.target.value)} placeholder="Write why, or Dad/Mum can help type it..."/><label>Mood</label><select value={mood} onChange={e=>setMood(e.target.value)}><option>😊 Happy</option><option>😍 Excited</option><option>😮 Amazed</option><option>🥰 Loved it</option><option>😴 Tired</option><option>😬 Nervous but brave</option></select><button onClick={save}>Save journal page and earn ⭐</button><p className="tiny">Dad/Mum note: {day.dadMum}</p></div>
 }
-
-function Checklist({ collection }){
-  const [text,setText] = useState('');
-  async function add(){ if(!text.trim()) return; await collection.addItem({ text, done:false }); setText(''); }
-  return <Card title="Shared Checklist" icon={<CheckCircle2/>}><input placeholder="Add checklist item" value={text} onChange={e=>setText(e.target.value)} /><button onClick={add}>Add</button>{collection.items.map(item=><div className="note" key={item.id}><b>{item.done ? '✅' : '☐'} {item.text}</b><small>{item.starter ? 'Starter item' : stampDate(item.createdAt)}</small>{!item.starter && <button className="danger" onClick={()=>collection.removeItem(item.id)}><Trash2 size={14}/> Delete</button>}</div>)}</Card>
+function DrawingStudio({drawings,rewards,page}){
+  const canvasRef = useRef(null); const [drawing,setDrawing] = useState(false); const [color,setColor] = useState('#ff70b7'); const [size,setSize]=useState(5); const [title,setTitle]=useState('Lexie drawing');
+  function pos(e){ const c=canvasRef.current; const rect=c.getBoundingClientRect(); const t=e.touches?.[0] || e; return {x:(t.clientX-rect.left)*(c.width/rect.width), y:(t.clientY-rect.top)*(c.height/rect.height)}; }
+  function start(e){ e.preventDefault(); setDrawing(true); const c=canvasRef.current; const ctx=c.getContext('2d'); const p=pos(e); ctx.beginPath(); ctx.moveTo(p.x,p.y); }
+  function move(e){ if(!drawing) return; e.preventDefault(); const c=canvasRef.current; const ctx=c.getContext('2d'); const p=pos(e); ctx.lineTo(p.x,p.y); ctx.strokeStyle=color; ctx.lineWidth=size; ctx.lineCap='round'; ctx.stroke(); }
+  function end(){ setDrawing(false); }
+  function clear(){ const c=canvasRef.current; c.getContext('2d').clearRect(0,0,c.width,c.height); }
+  async function save(){ const dataUrl=canvasRef.current.toDataURL('image/png'); await drawings.add({page,title,url:dataUrl,date:stampDate()}); await rewards.add({type:'drawing', title:'Drawing star', detail:title, date:stampDate(), value:1}); }
+  return <Card title="Draw with Finger or Apple Pencil" icon={<Palette/>}><input value={title} onChange={e=>setTitle(e.target.value)} placeholder="Drawing title"/><div style={{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}}><input type="color" value={color} onChange={e=>setColor(e.target.value)}/><label>Pen size</label><input type="range" min="2" max="20" value={size} onChange={e=>setSize(Number(e.target.value))}/></div><canvas ref={canvasRef} width="700" height="420" onMouseDown={start} onMouseMove={move} onMouseUp={end} onMouseLeave={end} onTouchStart={start} onTouchMove={move} onTouchEnd={end} style={{width:'100%',height:260,border:'3px dashed #ffaad5',borderRadius:18,background:'#fff',touchAction:'none'}}></canvas><div className="stampRow"><button onClick={save}>Save drawing + ⭐</button><button onClick={clear}>Clear</button></div>{drawings.items.slice(0,3).map(d=><div className="note" key={d.id}><b>{d.title}</b><small>{d.date}</small><img src={d.url} alt={d.title} style={{width:'100%',borderRadius:14}}/></div>)}</Card>
 }
-
-function Shopping({ collection }){
-  const [text,setText] = useState(''); const [person,setPerson] = useState('Lexie');
-  async function add(){ if(!text.trim()) return; await collection.addItem({ text, person }); setText(''); }
-  return <Card title="Japan Shopping List" icon={<ShoppingBag/>}><select value={person} onChange={e=>setPerson(e.target.value)}><option>Lexie</option><option>Ash</option><option>Jase</option><option>Family</option></select><input placeholder="Hello Kitty plush, guitar picks, snacks..." value={text} onChange={e=>setText(e.target.value)} /><button onClick={add}>Add shopping item</button>{collection.items.length===0?<p>No shopping items yet.</p>:collection.items.map(item=><div className="note" key={item.id}><b>{item.person}: {item.text}</b><small>{stampDate(item.createdAt)}</small><button className="danger" onClick={()=>collection.removeItem(item.id)}><Trash2 size={14}/> Delete</button></div>)}</Card>
+function PhotoUploader({photos,rewards,page}){
+  const [title,setTitle]=useState(''); const [busy,setBusy]=useState(false);
+  async function upload(e){ const file=e.target.files?.[0]; if(!file) return; setBusy(true); try{ const path=`tripPhotos/${Date.now()}-${file.name}`; const ref=storageRef(storage,path); await uploadBytes(ref,file); const url=await getDownloadURL(ref); await photos.add({page,title:title||file.name,url,path,date:stampDate()}); await rewards.add({type:'photo', title:'Photo upload star', detail:title||file.name, date:stampDate(), value:1}); setTitle(''); } catch(err){ alert('Photo upload failed. Check Storage rules.'); console.error(err); } finally{ setBusy(false); } }
+  return <Card title="Upload Photos" icon={<Camera/>}><input value={title} onChange={e=>setTitle(e.target.value)} placeholder="Photo title"/><label className="pill" style={{display:'inline-block',cursor:'pointer'}}><Upload size={16}/> Choose photo<input type="file" accept="image/*" capture="environment" onChange={upload} style={{display:'none'}}/></label>{busy && <p>Uploading...</p>}{photos.items.filter(p=>p.page===page).slice(0,4).map(p=><div className="note" key={p.id}><b>{p.title}</b><small>{p.date}</small><img src={p.url} alt={p.title} style={{width:'100%',borderRadius:14}}/></div>)}</Card>
 }
-
-function Translator(){return <section className="grid"><Card title="Voice Translator" icon={<Mic/>}><p>Tap a phrase to speak it in Japanese. Works best online, but saved phrase cards work offline.</p>{phrases.map(([en,ja,ro])=><button key={en} className="phrase" onClick={()=>say(ja)}><b>{en}</b><span>{ja}</span><small>{ro}</small></button>)}</Card><Card title="Visual Translator Helper" icon={<Camera/>}><p>Offline camera translation cannot be fully built into a small web app. Use this workflow:</p><ol><li>Open Apple Translate or Google Translate app.</li><li>Download Japanese offline language pack before leaving.</li><li>Use camera mode on menus, signs and tickets.</li></ol><p>This app stores translated notes in Add Info.</p></Card></section>}
-
-function Currency({aud,setAud,jpy,setJpy,expenses}){
-  const [label,setLabel] = useState(''); const [amount,setAmount] = useState(''); const [person,setPerson] = useState('Family');
-  async function addExpense(){ const value=Number(amount); if(!label || !value) return; await expenses.addItem({ label, jpy:value, aud:Number((value/AUD_TO_JPY).toFixed(2)), person }); setLabel(''); setAmount(''); }
-  const totalJpy = expenses.items.reduce((sum,e)=>sum+Number(e.jpy||0),0);
-  return <section className="grid"><Card title="Offline AUD ⇄ JPY Converter" icon={<Wallet/>}><p>Last known rate: 1 AUD ≈ ¥{AUD_TO_JPY.toFixed(3)} JPY.</p><label>AUD</label><input type="number" value={aud} onChange={e=>{const v=Number(e.target.value); setAud(v); setJpy(Math.round(v*AUD_TO_JPY))}}/><label>JPY</label><input type="number" value={jpy} onChange={e=>{const v=Number(e.target.value); setJpy(v); setAud((v/AUD_TO_JPY).toFixed(2))}}/><p className="big">${aud} ≈ ¥{Number(jpy).toLocaleString()}</p></Card><Card title="Shared Spending Tracker" icon={<ReceiptText/>}><select value={person} onChange={e=>setPerson(e.target.value)}><option>Family</option><option>Jase</option><option>Ash</option><option>Lexie</option></select><input placeholder="What was it?" value={label} onChange={e=>setLabel(e.target.value)} /><input placeholder="Amount in JPY" type="number" value={amount} onChange={e=>setAmount(e.target.value)} /><button onClick={addExpense}>Add expense</button><p><b>Total:</b> ¥{totalJpy.toLocaleString()} / ${(totalJpy/AUD_TO_JPY).toFixed(2)} AUD</p>{expenses.items.map(e=><div className="note" key={e.id}><b>{e.label}</b><small>{e.person} · ¥{Number(e.jpy).toLocaleString()} / ${Number(e.aud).toFixed(2)} AUD · {stampDate(e.createdAt)}</small><button className="danger" onClick={()=>expenses.removeItem(e.id)}><Trash2 size={14}/> Delete</button></div>)}</Card></section>;
+function Rewards({rewards,journal,photos,drawings}){
+  const total = rewards.items.reduce((sum,r)=>sum+(Number(r.value)||1),0);
+  const todayCount = rewards.items.filter(r=>new Date(r.date || Date.now()).toDateString()===new Date().toDateString()).length;
+  const badges = [ ['5','First 5 Stars','🎀'], ['10','Phrase Learner','🇯🇵'], ['20','Photo Explorer','📸'], ['30','Disney Explorer','🏰'], ['40','Sanrio Superstar','🎀'], ['50','Japan Adventure Champion','🏆'] ];
+  return <section className="grid"><Card title="Lexie’s Daily Rewards" icon={<Trophy/>}><div className="big">{todayCount}/5 today</div><p>Easy daily milestones: journal, photo, drawing, Japanese phrase, adventure prompt. More can still be logged as bonus stars.</p><div className="stampRow">{[1,2,3,4,5].map(n=><span key={n}>{todayCount>=n?'⭐':'☆'}</span>)}</div><p><b>Total stars:</b> {total}</p></Card><Card title="Badges" icon={<Star/>}>{badges.map(([need,name,emoji])=><div className="note" key={name}><b>{emoji} {name}</b><p>{total>=Number(need)?'Unlocked':'Needs '+need+' total stars'}</p></div>)}</Card><Card title="Reward History" icon={<BookOpen/>}>{rewards.items.length===0?<p>No rewards yet.</p>:rewards.items.map(r=><div className="note" key={r.id}><b>⭐ {r.title}</b><small>{r.date}</small><p>{r.detail}</p></div>)}</Card></section>
 }
-
-function Phone(){return <section className="grid"><Card title="Access on iPhone/iPad" icon={<Smartphone/>}><ol><li>Deploy this repo to Vercel.</li><li>Open the Vercel link in Safari.</li><li>Tap Share.</li><li>Tap Add to Home Screen.</li><li>Open it from the new icon.</li></ol></Card><Card title="ALDI Prepaid SIM Notes" icon={<Smartphone/>}><ul><li>Turn on international roaming before leaving Australia.</li><li>Expect mobile data to cost more overseas.</li><li>Use hotel Wi-Fi where possible.</li><li>Download Apple Maps offline areas and translator language packs before departure.</li><li>Keep screenshots/PDFs of tickets in Apple Files and Photos as backup.</li></ul></Card></section>}
-
-function AddInfo({ notes }){
-  const [title,setTitle]=useState(''); const [body,setBody]=useState(''); const [author,setAuthor]=useState('Jase');
-  async function add(){ if(!title&&!body)return; await notes.addItem({ title, body, author }); setTitle(''); setBody(''); }
-  return <section className="grid"><Card title="Add New Information" icon={<PlusCircle/>}><select value={author} onChange={e=>setAuthor(e.target.value)}><option>Jase</option><option>Ash</option><option>Lexie</option></select><input placeholder="Title, booking, restaurant, reminder..." value={title} onChange={e=>setTitle(e.target.value)}/><textarea placeholder="Paste details, translated text, notes, reminders or travel tips..." value={body} onChange={e=>setBody(e.target.value)}/><button onClick={add}>Save and sync</button><p className="tiny">Saved to Firebase so everyone sees it.</p></Card><Card title="Synced Notes" icon={<BookOpen/>}>{notes.items.length===0?<p>No notes yet.</p>:notes.items.map(n=><div className="note" key={n.id}><b>{n.title}</b><small>{n.author || 'Family'} · {stampDate(n.createdAt)}</small><p>{n.body}</p><button className="danger" onClick={()=>notes.removeItem(n.id)}><Trash2 size={14}/> Delete</button></div>)}</Card></section>;
+function JapaneseLessons({rewards}){
+  async function complete(l){ say(l.ja); await rewards.add({type:'japanese', title:l.reward, detail:`Practised: ${l.en} / ${l.romaji}`, date:stampDate(), value:1}); }
+  return <section className="grid"><Card title="Learn Basic Japanese" icon={<Languages/>}><p>Practise before departure. Each completed phrase earns Lexie a journal reward star.</p>{japaneseLessons.map(l=><button key={l.id} className="phrase" onClick={()=>complete(l)}><b>{l.level}: {l.en}</b><span>{l.ja}</span><small>{l.romaji} · tap to hear and earn ⭐</small></button>)}</Card><Card title="Phrase Challenge" icon={<Trophy/>}><ul><li>Learn 3 phrases before leaving Australia.</li><li>Use “arigatou” in a shop.</li><li>Ask “ikura desu ka?” when shopping.</li><li>Use “sumimasen” before asking for help.</li></ul></Card></section>
 }
+function Emergency(){return <section className="grid"><Card title="Emergency & Local Contacts" icon={<Shield/>}><p>Save this tab to the home screen and keep screenshots in Apple Photos.</p>{emergencyContacts.map(c=><div className="note" key={c.name}><b>{c.name}</b><p>{c.detail}</p>{c.type==='call' && c.number && <a className="pill" href={callLink(c.number)}><PhoneCall size={16}/> Call {c.number}</a>}{c.type==='map' && <a className="pill" href={appleMaps(c.map)} target="_blank"><MapPin size={16}/> Open in Apple Maps</a>}</div>)}</Card><Card title="Lexie Help Card" icon={<Heart/>}><p><b>English:</b> My name is Lexie. I am travelling with my Mum and Dad. Please help me call them.</p><p><b>Japanese:</b> 私の名前はレクシーです。お母さんとお父さんと旅行しています。電話するのを手伝ってください。</p><button onClick={()=>say('私の名前はレクシーです。お母さんとお父さんと旅行しています。電話するのを手伝ってください。')}>Speak help card</button><textarea placeholder="Add Dad phone, Mum phone, hotel room, insurance policy number here..." /></Card></section>}
+function Food(){return <section className="grid"><Card title="Dad & Mum Vegetarian Mode" icon={<Utensils/>}><p>Watch for hidden dashi, fish stock, chicken broth and meat extracts.</p><ul><li>T’s TanTan near Tokyo Station</li><li>Ain Soph locations</li><li>Vegetarian curry where confirmed</li><li>Carry snacks for Fuji and Sumo days</li></ul></Card><Card title="Lexie Plain-Food Mode" icon={<Utensils/>}><p>Lexie is not vegetarian. She likes simple food with no sauce or strong flavours.</p><ul><li>Chicken nuggets</li><li>Hot chips/fries</li><li>Chicken noodles</li><li>Plain pasta with no sauce</li><li>Pizza, toast, ice cream, pancakes</li></ul></Card>{places.map(p=><Card key={p.name} title={`${p.emoji} ${p.name}`} icon={<MapPin/>}><p><b>Lexie-friendly ideas:</b></p><ul>{p.lexieFood.map(f=><li key={f}>{f}</li>)}</ul><a className="pill" target="_blank" href={appleMaps(`${p.name} McDonald's KFC fries noodles`) }>Find simple food nearby</a></Card>)}</section>}
+function Translator(){return <section className="grid"><Card title="Voice Translator" icon={<Mic/>}><p>Tap a phrase to speak it in Japanese. Saved phrase cards still show offline.</p>{japaneseLessons.map(l=><button key={l.id} className="phrase" onClick={()=>say(l.ja)}><b>{l.en}</b><span>{l.ja}</span><small>{l.romaji}</small></button>)}</Card><Card title="Visual Translator Helper" icon={<Camera/>}><p>For full camera translation, download Japanese in Apple Translate or Google Translate before departure. Use this app to store translated notes and phrase practice.</p></Card></section>}
+function Currency({aud,setAud,jpy,setJpy}){return <section className="grid"><Card title="Offline AUD ⇄ JPY Converter" icon={<Wallet/>}><p>Last known rate: 1 AUD ≈ ¥{AUD_TO_JPY.toFixed(3)} JPY.</p><label>AUD</label><input type="number" value={aud} onChange={e=>{const v=Number(e.target.value); setAud(v); setJpy(Math.round(v*AUD_TO_JPY))}}/><label>JPY</label><input type="number" value={jpy} onChange={e=>{const v=Number(e.target.value); setJpy(v); setAud((v/AUD_TO_JPY).toFixed(2))}}/><p className="big">${aud} ≈ ¥{Number(jpy).toLocaleString()}</p></Card></section>}
+function Phone(){return <section className="grid"><Card title="Access on iPhone/iPad" icon={<Smartphone/>}><ol><li>Deploy this repo to Vercel.</li><li>Open the Vercel link in Safari.</li><li>Tap Share.</li><li>Tap Add to Home Screen.</li><li>Open it from the new icon.</li></ol></Card><Card title="Apple Maps Offline" icon={<MapPin/>}><ol><li>Open Apple Maps.</li><li>Tap your picture/initials.</li><li>Tap Offline Maps.</li><li>Add Tokyo, Narita, Disney/Maihama, Tama Center and Fuji/Kawaguchiko.</li><li>Check live routes before travel when internet is available.</li></ol></Card><Card title="ALDI Prepaid SIM Notes" icon={<Smartphone/>}><ul><li>Turn on international roaming before leaving Australia.</li><li>Expect mobile data to cost more overseas.</li><li>Use hotel Wi-Fi where possible.</li><li>Download offline maps and translator language packs before departure.</li><li>Keep screenshots/PDFs of tickets in Apple Files and Photos as backup.</li></ul></Card></section>}
+function AddInfo({notes,photos}){const [title,setTitle]=useState(''); const [body,setBody]=useState(''); async function add(){if(!title&&!body)return; await notes.add({title,body,date:stampDate()}); setTitle(''); setBody('')} return <section className="grid"><Card title="Add New Information" icon={<PlusCircle/>}><input placeholder="Title, booking, restaurant, reminder..." value={title} onChange={e=>setTitle(e.target.value)}/><textarea placeholder="Paste details, translated text, notes, reminders or travel tips..." value={body} onChange={e=>setBody(e.target.value)}/><button onClick={add}>Save and sync</button></Card><Card title="Saved Notes" icon={<BookOpen/>}>{notes.items.length===0?<p>No notes yet.</p>:notes.items.map(n=><div className="note" key={n.id}><b>{n.title}</b><small>{n.date}</small><p>{n.body}</p></div>)}</Card></section>}
 
 createRoot(document.getElementById('root')).render(<App/>);
 
-if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js').catch(()=>{}));
-}
+if ('serviceWorker' in navigator) { window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js').catch(()=>{})); }

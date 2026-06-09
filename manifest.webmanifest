@@ -1,0 +1,15 @@
+{
+  "name": "Ash, Jase & Lexie's Excellent Adventure",
+  "short_name": "Excellent Adventure",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#fff7fc",
+  "theme_color": "#ff8fc7",
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ]
+}

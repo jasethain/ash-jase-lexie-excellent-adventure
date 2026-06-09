@@ -339,6 +339,7 @@ function App(){
   const photos = useFirebaseCollection('photos', []);
   const drawings = useFirebaseCollection('drawings', []);
   const lessons = useFirebaseCollection('japaneseLessonProgress', []);
+  const customPhrases = useFirebaseCollection('customJapanesePhrases', []);
   const [aud,setAud] = useState(50);
   const [jpy,setJpy] = useState(Math.round(50*AUD_TO_JPY));
   const nextTrip = Math.ceil((new Date('2026-07-01T09:00:00')-today)/(1000*60*60*24));
@@ -368,7 +369,7 @@ function App(){
       {tab==='routes' && <Routes />}
       {tab==='fuji' && <FujiDay reminders={reminders} />}
       {tab==='journal' && <LexieJournal journal={journal} rewards={rewards} photos={photos} drawings={drawings} />}
-      {tab==='learn' && <JapaneseLearning progress={lessons} rewards={rewards} />}
+      {tab==='learn' && <JapaneseLearning progress={lessons} rewards={rewards} customPhrases={customPhrases} />}
       {tab==='rewards' && <Rewards rewards={rewards} />}
       {tab==='photos' && <Photos photos={photos} />}
       {tab==='emergency' && <Emergency />}
@@ -588,7 +589,58 @@ function PhotoUploader({photos,rewards,source='Photo Memories'}){
   </Card>
 }
 
-function JapaneseLearning({progress,rewards}){
+function JapaneseLearning({progress,rewards,customPhrases}){
+  const [english,setEnglish] = useState('');
+  const [japanese,setJapanese] = useState('');
+  const [romaji,setRomaji] = useState('');
+  const [category,setCategory] = useState('My Phrases');
+  const phraseLookup = {
+    'hello': ['こんにちは', 'Konnichiwa'],
+    'thank you': ['ありがとう', 'Arigatou'],
+    'thanks': ['ありがとう', 'Arigatou'],
+    'excuse me': ['すみません', 'Sumimasen'],
+    'sorry': ['すみません', 'Sumimasen'],
+    'please': ['お願いします', 'Onegaishimasu'],
+    'where is the toilet': ['トイレはどこですか？', 'Toire wa doko desu ka?'],
+    'where is the bathroom': ['トイレはどこですか？', 'Toire wa doko desu ka?'],
+    'how much is it': ['いくらですか？', 'Ikura desu ka?'],
+    'which platform': ['何番線ですか？', 'Nanbansen desu ka?'],
+    'i am lost': ['私は迷子です。', 'Watashi wa maigo desu.'],
+    'please help me': ['助けてください。', 'Tasukete kudasai.'],
+    'i am vegetarian': ['私はベジタリアンです。', 'Watashi wa bejitarian desu.'],
+    'no meat please': ['肉なしでお願いします。', 'Niku nashi de onegaishimasu.'],
+    'no fish please': ['魚なしでお願いします。', 'Sakana nashi de onegaishimasu.'],
+    'no sauce please': ['ソースなしでお願いします。', 'Sōsu nashi de onegaishimasu.'],
+    'plain pasta no sauce please': ['ソースなしのプレーンパスタをお願いします。', 'Sōsu nashi no purēn pasuta o onegaishimasu.'],
+    'do you have chicken nuggets': ['チキンナゲットはありますか？', 'Chikin nagetto wa arimasu ka?'],
+    'do you have hot chips': ['フライドポテトはありますか？', 'Furaido poteto wa arimasu ka?'],
+    'where is the train station': ['駅はどこですか？', 'Eki wa doko desu ka?'],
+    'can i take a photo': ['写真を撮ってもいいですか？', 'Shashin o totte mo ii desu ka?'],
+    'photo please': ['写真をお願いします。', 'Shashin o onegaishimasu.']
+  };
+  function normalisePhrase(value){
+    return value.toLowerCase().trim().replace(/[?.!]/g,'').replace(/\s+/g,' ');
+  }
+  function suggestTranslation(){
+    const found = phraseLookup[normalisePhrase(english)];
+    if(found){ setJapanese(found[0]); setRomaji(found[1]); return; }
+    setJapanese('');
+    setRomaji('');
+    alert('I do not have an offline translation for that phrase yet. You can still save the English phrase, then add the Japanese later from Apple Translate or Google Translate.');
+  }
+  async function saveCustomPhrase(){
+    if(!english.trim()) return;
+    await customPhrases.add({
+      en: english.trim(),
+      ja: japanese.trim(),
+      romaji: romaji.trim(),
+      category: category || 'My Phrases',
+      practised:false,
+      favourite:false,
+      source:'custom'
+    });
+    setEnglish(''); setJapanese(''); setRomaji(''); setCategory('My Phrases');
+  }
   async function complete(lesson){
     const already = progress.items.some(x=>x.lessonId===lesson.id);
     if(!already){
@@ -596,8 +648,36 @@ function JapaneseLearning({progress,rewards}){
       await rewards.add({ day:dateKey(), stars:1, reason:`Practised Japanese: ${lesson.en}`, type:'japanese' });
     }
   }
+  async function practiseCustom(phrase){
+    if(phrase.id){
+      await customPhrases.update(phrase.id,{practised:true, practisedAt:new Date().toISOString()});
+    }
+    await rewards.add({ day:dateKey(), stars:1, reason:`Practised custom phrase: ${phrase.en}`, type:'japanese' });
+  }
   return <section className="grid" id="phrases">
     <Card title="Japanese Phrase Quest" icon={<GraduationCap/>}><p>Practising simple phrases before departure earns Lexie journal rewards. Mum or Dad can help.</p></Card>
+    <Card title="My Japanese Phrase Builder" icon={<PlusCircle/>}>
+      <p>Type a phrase in English. The app will auto-fill common travel phrases offline, or you can save the English and add the Japanese later.</p>
+      <input value={english} onChange={e=>setEnglish(e.target.value)} placeholder="Type English phrase, e.g. Where is the toilet?" />
+      <div className="linkRow"><button onClick={suggestTranslation}>Suggest Japanese</button><button onClick={saveCustomPhrase}>Save phrase</button></div>
+      <input value={japanese} onChange={e=>setJapanese(e.target.value)} placeholder="Japanese translation" />
+      <input value={romaji} onChange={e=>setRomaji(e.target.value)} placeholder="Romaji pronunciation" />
+      <input value={category} onChange={e=>setCategory(e.target.value)} placeholder="Category, e.g. Food, Train, Disney" />
+      <p className="tiny">For phrases the app does not know, use Apple Translate/Google Translate, then paste the Japanese here so it is saved offline.</p>
+    </Card>
+    {customPhrases.items.length > 0 && <Card title="Lexie's Saved Phrase Book" icon={<BookOpen/>}>
+      {customPhrases.items.map(p=><div className="phraseCard" key={p.id}>
+        <b>{p.practised?'✅':'📌'} {p.en}</b>
+        {p.ja && <div className="ja">{p.ja}</div>}
+        {p.romaji && <small>{p.romaji}</small>}
+        <small>{p.category || 'My Phrases'}</small>
+        <div className="linkRow">
+          {p.ja && <button onClick={()=>speak(p.ja)}>Hear it</button>}
+          <button onClick={()=>practiseCustom(p)}>Practised + ⭐</button>
+          <button onClick={()=>customPhrases.update(p.id,{favourite:!p.favourite})}>{p.favourite?'★ Favourite':'☆ Favourite'}</button>
+        </div>
+      </div>)}
+    </Card>}
     {japaneseLessons.map(l=>{
       const done=progress.items.some(x=>x.lessonId===l.id);
       return <Card key={l.id} title={`${done?'✅':'🇯🇵'} ${l.en}`} icon={<Mic/>}>
@@ -623,11 +703,30 @@ function Photos({photos}){
 }
 
 function Emergency(){
-  const lexieCard = 'My name is Lexie. My Dad is Jase and my Mum is Ash. Please help me call my family or take me to hotel staff, police, or station staff.\n\n私はレクシーです。お父さんはジェイス、お母さんはアッシュです。家族に連絡するのを手伝ってください。ホテルのスタッフ、警察官、または駅員さんのところへ連れて行ってください。';
+  const lexieCard = `私は迷子です
+
+My name is Lexie. My parents are Jason and Ashleigh Thain. We are staying at Hotel: APA Hotel & Resort Tokyo Bay Shiomi
+2-8-6 Shiomi, Koto-ku, Tokyo.
+
+Please help me contact my family. Please take me to a hotel staff member, a police officer, or a station attendant.
+
+私の名前はレクシーです。両親はジェイソンとアシュリー・セインです。私たちはアパホテル＆リゾート東京ベイ塩見に滞在しています。
+東京都江東区塩見2-8-6
+
+家族と連絡を取れるよう、ご協力をお願いします。ホテルのスタッフ、警察官、駅員の方のところへ連れて行ってください。`;
   return <section className="grid" id="emergency">
     <Card title="I'm Lost / Help Me" icon={<Shield/>}>
-      <div className="lostCard"><h2>私は迷子です</h2><p>My name is Lexie. My Dad is Jase and my Mum is Ash. Please help me call my family or take me to hotel staff, police, or station staff.</p><p><b>Hotel:</b> {HOTEL.name}<br/>{HOTEL.address}</p><p>ホテルまで連れて行ってください。または家族に電話してください。</p></div>
-      <button onClick={()=>speak('助けてください。私は迷子です。')}>Speak Japanese help phrase</button>
+      <div className="lostCard">
+        <h2>私は迷子です</h2>
+        <p><b>My name is Lexie.</b></p>
+        <p>My parents are Jason and Ashleigh Thain. We are staying at Hotel: APA Hotel & Resort Tokyo Bay Shiomi<br/>2-8-6 Shiomi, Koto-ku, Tokyo.</p>
+        <p>Please help me contact my family. Please take me to a hotel staff member, a police officer, or a station attendant.</p>
+        <hr/>
+        <p>私の名前はレクシーです。両親はジェイソンとアシュリー・セインです。私たちはアパホテル＆リゾート東京ベイ塩見に滞在しています。</p>
+        <p>東京都江東区塩見2-8-6</p>
+        <p>家族と連絡を取れるよう、ご協力をお願いします。ホテルのスタッフ、警察官、駅員の方のところへ連れて行ってください。</p>
+      </div>
+      <button onClick={()=>speak('私は迷子です。家族と連絡を取れるよう、ご協力をお願いします。')}>Speak Japanese help phrase</button>
       <a className="pill" href={appleMaps(HOTEL.apple)} target="_blank">Open hotel in Apple Maps</a>
     </Card>
     <Card title="Japan Emergency Contacts" icon={<Shield/>}>
@@ -638,7 +737,7 @@ function Emergency(){
     </Card>
     <Card title="Hotel" icon={<Home/>}><p><b>{HOTEL.name}</b></p><p>{HOTEL.address}</p><a className="pill" href={appleMaps(HOTEL.apple)} target="_blank">Open hotel map</a></Card>
     <Card title="Lexie Help Card" icon={<Users/>}><textarea readOnly value={lexieCard}/><button onClick={()=>navigator.clipboard?.writeText(lexieCard)}>Copy Lexie card</button></Card>
-    <Card title="Family Contacts" icon={<PhoneIcon/>}><p>Dad: Jase</p><p>Mum: Ash</p><p>Add phone numbers in Add Info or iPhone contacts before departure.</p></Card>
+    <Card title="Family Contacts" icon={<PhoneIcon/>}><p>Dad: Jason Thain</p><p>Mum: Ashleigh Thain</p><p>Add phone numbers in Add Info or iPhone contacts before departure.</p></Card>
   </section>
 }
 

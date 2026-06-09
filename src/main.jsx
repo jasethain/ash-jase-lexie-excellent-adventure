@@ -4,7 +4,7 @@ import { createRoot } from 'react-dom/client';
 import {
   MapPin, Mic, Camera, Wallet, BookOpen, Utensils, Train, PlusCircle,
   Smartphone, Sparkles, Heart, Download, Star, Shield, CheckSquare,
-  GraduationCap, Palette, Image as ImageIcon, Phone, FileText, Trophy,
+  GraduationCap, Palette, Image as ImageIcon, Phone as PhoneIcon, FileText, Trophy,
   Home, Users, Route, Gift, RefreshCw, Upload, Save, Eraser
 } from 'lucide-react';
 import './styles.css';
@@ -544,7 +544,7 @@ function Emergency(){
     </Card>
     <Card title="Hotel" icon={<Home/>}><p><b>{HOTEL.name}</b></p><p>{HOTEL.address}</p><a className="pill" href={appleMaps(HOTEL.apple)} target="_blank">Open hotel map</a></Card>
     <Card title="Lexie Help Card" icon={<Users/>}><textarea readOnly value={lexieCard}/><button onClick={()=>navigator.clipboard?.writeText(lexieCard)}>Copy Lexie card</button></Card>
-    <Card title="Family Contacts" icon={<Phone/>}><p>Dad: Jase</p><p>Mum: Ash</p><p>Add phone numbers in Add Info or iPhone contacts before departure.</p></Card>
+    <Card title="Family Contacts" icon={<PhoneIcon/>}><p>Dad: Jase</p><p>Mum: Ash</p><p>Add phone numbers in Add Info or iPhone contacts before departure.</p></Card>
   </section>
 }
 

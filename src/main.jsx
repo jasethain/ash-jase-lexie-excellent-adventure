@@ -774,8 +774,11 @@ function JapaneseLearning({progress,rewards,customPhrases}){
       const output = json?.responseData?.translatedText || '';
       if(!output) throw new Error('No translation returned');
       setTranslatedText(output);
-      setRomaji('');
-      setStatus('Online translation ready. Check important phrases with Mum or Dad before relying on them.');
+      const computedRomaji = direction === 'en-ja'
+        ? phraseRomaji(text, output)
+        : phraseRomaji(output, text);
+      setRomaji(computedRomaji || '');
+      setStatus('Online translation ready. Romaji pronunciation has been added where possible. Check important phrases with Mum or Dad before relying on them.');
     } catch (err) {
       const key = direction === 'en-ja' ? normalisePhrase(text) : normaliseJapanese(text);
       const found = direction === 'en-ja' ? phraseLookup[key] : reverseLookup[key];
@@ -801,7 +804,7 @@ function JapaneseLearning({progress,rewards,customPhrases}){
     await customPhrases.add({
       en,
       ja,
-      romaji: romaji || phraseRomaji(en || english, ja || japanese).trim(),
+      romaji: (romaji || phraseRomaji(en, ja)).trim(),
       category: category || 'My Phrases',
       practised:false,
       favourite:false,
@@ -829,6 +832,11 @@ function JapaneseLearning({progress,rewards,customPhrases}){
       <textarea value={sourceText} onChange={e=>setSourceText(e.target.value)} placeholder={direction==='en-ja'?'Type English, e.g. Where is the toilet?':'日本語を入力してください'} />
       <div className="linkRow"><button disabled={busy} onClick={translateOnline}>{busy?'Translating...':'Translate Online'}</button><button onClick={offlineSuggest}>Offline Phrasebook</button><button onClick={saveCustomPhrase}>Save phrase</button></div>
       {status && <div className="lookupHelp"><b>Translator</b><p>{status}</p></div>}
+      {translatedText && <TranslationResultCard
+        english={direction === 'en-ja' ? sourceText : translatedText}
+        japanese={direction === 'en-ja' ? translatedText : sourceText}
+        romaji={romaji}
+      />}
       <textarea value={translatedText} onChange={e=>setTranslatedText(e.target.value)} placeholder={direction==='en-ja'?'Japanese translation':'English translation'} />
       {direction==='en-ja' && <input value={romaji} onChange={e=>setRomaji(e.target.value)} placeholder="Romaji pronunciation, optional" />}
       <input value={category} onChange={e=>setCategory(e.target.value)} placeholder="Category, e.g. Food, Train, Disney" />
@@ -839,7 +847,7 @@ function JapaneseLearning({progress,rewards,customPhrases}){
       {customPhrases.items.map(p=><div className="phraseCard" key={p.id}>
         <b>{p.practised?'✅':'📌'} {p.en || p.ja}</b>
         {p.ja && <div className="ja">{p.ja}</div>}
-        {p.romaji && <small>{p.romaji || phraseRomaji(p.en || p.english, p.ja || p.japanese)}</small>}
+        {p.ja && <small>🔤 {p.romaji || phraseRomaji(p.en || p.english, p.ja || p.japanese)}</small>}
         <small>{p.category || 'My Phrases'}</small>
         <div className="linkRow">
           {p.ja && <button onClick={()=>speak(p.ja)}>Hear it</button>}

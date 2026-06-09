@@ -40,8 +40,8 @@ a{color:var(--hot);font-weight:800}
 }
 
 header{
-  position:sticky;
-  top:12px;
+  position:relative;
+  top:auto;
   z-index:10;
   display:flex;
   gap:18px;
@@ -87,12 +87,16 @@ header p{margin:.35rem 0 0;color:var(--muted);font-weight:800}
 
 nav{
   position:sticky;
-  top:120px;
-  z-index:9;
+  top:0;
+  z-index:20;
   display:flex;
   gap:10px;
-  overflow:auto;
+  overflow-x:auto;
+  overflow-y:hidden;
   padding:14px 4px 16px;
+  background:linear-gradient(90deg, rgba(255,246,251,.96), rgba(238,250,255,.96));
+  border-radius:22px;
+  backdrop-filter:blur(12px);
   margin:10px 0 18px;
   scrollbar-color:rgba(196,20,114,.4) transparent;
 }
@@ -118,6 +122,7 @@ nav button.active,.chip.active{
 }
 
 .grid{
+  clear:both;
   display:grid;
   grid-template-columns:repeat(auto-fit,minmax(280px,1fr));
   gap:18px;
@@ -341,8 +346,33 @@ main,header,nav{position:relative;z-index:1}
   .app{padding:10px}
   header{position:static;border-radius:22px;padding:16px}
   .kitty{width:52px;height:52px;font-size:1.7rem}
-  nav{top:0;padding:10px 2px}
+  nav{position:sticky;top:0;padding:10px 2px;margin-bottom:16px}
   .grid{grid-template-columns:1fr}
   .card{padding:16px;border-radius:22px}
   .big{font-size:3rem}
+}
+
+.phraseCard small{
+  display:block;
+  margin-top:6px;
+  color:#5d5362;
+  font-weight:800;
+}
+.lookupHelp{
+  border:2px solid rgba(61,142,219,.18);
+  background:rgba(223,244,255,.7);
+  border-radius:18px;
+  padding:12px;
+  margin:10px 0;
+}
+.linkRow{
+  display:flex;
+  gap:10px;
+  flex-wrap:wrap;
+  align-items:center;
+  margin:8px 0;
+}
+.linkRow button.active{
+  background:linear-gradient(135deg,#ff7fbd,#ffe58d);
+  color:#fff;
 }

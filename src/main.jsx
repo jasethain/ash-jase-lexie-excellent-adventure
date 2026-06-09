@@ -656,14 +656,18 @@ function PhotoUploader({photos,rewards,source='Photo Memories'}){
 }
 
 function JapaneseLearning({progress,rewards,customPhrases}){
-  const [english,setEnglish] = useState('');
-  const [japanese,setJapanese] = useState('');
+  const [sourceText,setSourceText] = useState('');
+  const [translatedText,setTranslatedText] = useState('');
   const [romaji,setRomaji] = useState('');
   const [category,setCategory] = useState('My Phrases');
-  const [lookupHelp,setLookupHelp] = useState('');
+  const [direction,setDirection] = useState('en-ja');
+  const [translationStatus,setTranslationStatus] = useState('');
+  const [busy,setBusy] = useState(false);
+
   const phraseLookup = {
     'hello': ['こんにちは', 'Konnichiwa'],
-    'thank you': ['ありがとう', 'Arigatou'],
+    'good morning': ['おはようございます', 'Ohayou gozaimasu'],
+    'thank you': ['ありがとうございます', 'Arigatou gozaimasu'],
     'thanks': ['ありがとう', 'Arigatou'],
     'excuse me': ['すみません', 'Sumimasen'],
     'sorry': ['すみません', 'Sumimasen'],
@@ -683,50 +687,71 @@ function JapaneseLearning({progress,rewards,customPhrases}){
     'do you have hot chips': ['フライドポテトはありますか？', 'Furaido poteto wa arimasu ka?'],
     'where is the train station': ['駅はどこですか？', 'Eki wa doko desu ka?'],
     'can i take a photo': ['写真を撮ってもいいですか？', 'Shashin o totte mo ii desu ka?'],
-    'photo please': ['写真をお願いします。', 'Shashin o onegaishimasu.']
+    'photo please': ['写真をお願いします。', 'Shashin o onegaishimasu.'],
+    'my name is lexie': ['私の名前はレクシーです。', 'Watashi no namae wa Rekushī desu.'],
+    'my parents are jason and ashleigh thain': ['両親はジェイソンとアシュリー・セインです。', 'Ryōshin wa Jeison to Ashurī Sein desu.']
   };
+
   function normalisePhrase(value){
     return value.toLowerCase().trim().replace(/[?.!]/g,'').replace(/\s+/g,' ');
   }
-  async function copyForAppleTranslate(){
-    const text = english.trim();
-    if(!text){ setLookupHelp('Type an English phrase first.'); return; }
+
+  async function translateText(){
+    const text = sourceText.trim();
+    if(!text){ setTranslationStatus('Type something to translate first.'); return; }
+    setBusy(true);
+    setTranslationStatus('Translating...');
+    setRomaji('');
+
+    // Instant offline fallback for the family travel phrases Lexie is most likely to use.
+    if(direction === 'en-ja'){
+      const found = phraseLookup[normalisePhrase(text)];
+      if(found){
+        setTranslatedText(found[0]);
+        setRomaji(found[1]);
+        setTranslationStatus('Offline phrase found. You can save it to the phrase book.');
+        setBusy(false);
+        return;
+      }
+    }
+
     try {
-      await navigator.clipboard?.writeText(text);
-      setLookupHelp('Copied to clipboard. Open Apple Translate, paste it, choose English → Japanese, then paste the result back here.');
-    } catch {
-      setLookupHelp('Copy this phrase, open Apple Translate, choose English → Japanese, then paste the result back here.');
+      const response = await fetch('/api/translate', {
+        method:'POST',
+        headers:{ 'Content-Type':'application/json' },
+        body: JSON.stringify({ text, direction })
+      });
+      const result = await response.json();
+      if(!response.ok){
+        throw new Error(result?.error || 'Translation service unavailable.');
+      }
+      setTranslatedText(result.translatedText || '');
+      setTranslationStatus('Online translation complete. Save it if you want it available later.');
+    } catch (err) {
+      setTranslationStatus(`Could not use online translator: ${err.message}. Saved/common phrases still work offline.`);
+    } finally {
+      setBusy(false);
     }
   }
-  async function openAppleTranslate(){
-    await copyForAppleTranslate();
-    // iOS does not provide a reliable public website API for Apple Translate.
-    // This tries to open the native app if available, then leaves the copied text ready to paste.
-    window.location.href = 'translate://';
-  }
-  function openAppleTranslateGuide(){
-    window.open('https://support.apple.com/guide/iphone/translate-text-voice-and-conversations-iphd74cb450f/ios', '_blank');
-  }
-  function suggestTranslation(){
-    const found = phraseLookup[normalisePhrase(english)];
-    if(found){ setJapanese(found[0]); setRomaji(found[1]); setLookupHelp('Offline phrase found. Save it to Lexie’s phrase book when ready.'); return; }
-    setJapanese('');
-    setRomaji('');
-    copyForAppleTranslate();
-  }
+
   async function saveCustomPhrase(){
-    if(!english.trim()) return;
+    if(!sourceText.trim() && !translatedText.trim()) return;
+    const en = direction === 'en-ja' ? sourceText.trim() : translatedText.trim();
+    const ja = direction === 'en-ja' ? translatedText.trim() : sourceText.trim();
     await customPhrases.add({
-      en: english.trim(),
-      ja: japanese.trim(),
+      en,
+      ja,
       romaji: romaji.trim(),
       category: category || 'My Phrases',
+      direction,
       practised:false,
       favourite:false,
-      source:'custom'
+      source:'translator'
     });
-    setEnglish(''); setJapanese(''); setRomaji(''); setCategory('My Phrases');
+    setSourceText(''); setTranslatedText(''); setRomaji(''); setCategory('My Phrases');
+    setTranslationStatus('Saved to Lexie’s phrase book.');
   }
+
   async function complete(lesson){
     const already = progress.items.some(x=>x.lessonId===lesson.id);
     if(!already){
@@ -738,28 +763,39 @@ function JapaneseLearning({progress,rewards,customPhrases}){
     if(phrase.id){
       await customPhrases.update(phrase.id,{practised:true, practisedAt:new Date().toISOString()});
     }
-    await rewards.add({ day:dateKey(), stars:1, reason:`Practised custom phrase: ${phrase.en}`, type:'japanese' });
+    await rewards.add({ day:dateKey(), stars:1, reason:`Practised phrase: ${phrase.en || phrase.ja}`, type:'japanese' });
   }
+
+  const inputLabel = direction === 'en-ja' ? 'English' : 'Japanese';
+  const outputLabel = direction === 'en-ja' ? 'Japanese' : 'English';
+  const inputPlaceholder = direction === 'en-ja' ? 'Type English, e.g. Where is the toilet?' : '日本語を入力してください。';
+
   return <section className="grid" id="phrases">
     <Card title="Japanese Phrase Quest" icon={<GraduationCap/>}><p>Practising simple phrases before departure earns Lexie journal rewards. Mum or Dad can help.</p></Card>
-    <Card title="My Japanese Phrase Builder" icon={<PlusCircle/>}>
-      <p>Type a phrase in English. The app will auto-fill common travel phrases offline, or you can save the English and add the Japanese later.</p>
-      <input value={english} onChange={e=>setEnglish(e.target.value)} placeholder="Type English phrase, e.g. Where is the toilet?" />
-      <div className="linkRow"><button onClick={suggestTranslation}>Suggest Japanese</button><button onClick={openAppleTranslate}>Look up in Apple Translate</button><button onClick={saveCustomPhrase}>Save phrase</button></div>
-      {lookupHelp && <div className="lookupHelp"><b>Apple Translate helper</b><p>{lookupHelp}</p><button onClick={openAppleTranslateGuide}>Open Apple Translate instructions</button></div>}
-      <input value={japanese} onChange={e=>setJapanese(e.target.value)} placeholder="Japanese translation" />
-      <input value={romaji} onChange={e=>setRomaji(e.target.value)} placeholder="Romaji pronunciation" />
+    <Card title="Two-Way English ⇄ Japanese Translator" icon={<PlusCircle/>}>
+      <p>Translate only between English and Japanese. Saved/common phrases remain available in the app for travel.</p>
+      <div className="linkRow">
+        <button className={direction==='en-ja'?'active':''} onClick={()=>{setDirection('en-ja'); setSourceText(''); setTranslatedText(''); setRomaji('');}}>English → Japanese</button>
+        <button className={direction==='ja-en'?'active':''} onClick={()=>{setDirection('ja-en'); setSourceText(''); setTranslatedText(''); setRomaji('');}}>Japanese → English</button>
+      </div>
+      <label>{inputLabel}</label>
+      <textarea value={sourceText} onChange={e=>setSourceText(e.target.value)} placeholder={inputPlaceholder} />
+      <div className="linkRow"><button disabled={busy} onClick={translateText}>{busy?'Translating...':'Translate'}</button><button onClick={saveCustomPhrase}>Save phrase</button></div>
+      {translationStatus && <div className="lookupHelp"><b>Translator</b><p>{translationStatus}</p></div>}
+      <label>{outputLabel}</label>
+      <textarea value={translatedText} onChange={e=>setTranslatedText(e.target.value)} placeholder="Translation appears here" />
+      {direction==='en-ja' && <input value={romaji} onChange={e=>setRomaji(e.target.value)} placeholder="Romaji pronunciation, optional" />}
       <input value={category} onChange={e=>setCategory(e.target.value)} placeholder="Category, e.g. Food, Train, Disney" />
-      <p className="tiny">For phrases the app does not know, tap Look up in Apple Translate. The English phrase is copied first so it is ready to paste. Then add the Japanese here so it is saved offline.</p>
+      <p className="tiny">Online translation uses your Vercel API route. Add GOOGLE_TRANSLATE_API_KEY in Vercel Environment Variables before using online translation.</p>
     </Card>
     {customPhrases.items.length > 0 && <Card title="Lexie's Saved Phrase Book" icon={<BookOpen/>}>
       {customPhrases.items.map(p=><div className="phraseCard" key={p.id}>
-        <b>{p.practised?'✅':'📌'} {p.en}</b>
+        <b>{p.practised?'✅':'📌'} {p.en || 'Japanese phrase'}</b>
         {p.ja && <div className="ja">{p.ja}</div>}
         {p.romaji && <small>{p.romaji}</small>}
         <small>{p.category || 'My Phrases'}</small>
         <div className="linkRow">
-          {p.ja && <button onClick={()=>speak(p.ja)}>Hear it</button>}
+          {p.ja && <button onClick={()=>speak(p.ja)}>Hear Japanese</button>}
           <button onClick={()=>practiseCustom(p)}>Practised + ⭐</button>
           <button onClick={()=>customPhrases.update(p.id,{favourite:!p.favourite})}>{p.favourite?'★ Favourite':'☆ Favourite'}</button>
         </div>

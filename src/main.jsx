@@ -275,6 +275,34 @@ function speak(text){
 }
 function dateKey(){ return new Date().toISOString().slice(0,10); }
 
+function preferredNetworkMode(){
+  try { return localStorage.getItem('ajl-network-mode') || 'online'; } catch { return 'online'; }
+}
+async function clearAppCaches(){
+  try {
+    if ('caches' in window) {
+      const names = await caches.keys();
+      await Promise.all(names.map(name => caches.delete(name)));
+    }
+    if ('serviceWorker' in navigator) {
+      const regs = await navigator.serviceWorker.getRegistrations();
+      await Promise.all(regs.map(reg => reg.unregister()));
+    }
+  } catch (err) {
+    console.warn('Cache clear failed', err);
+  }
+}
+async function registerOfflineWorker(){
+  try {
+    if ('serviceWorker' in navigator) {
+      const reg = await navigator.serviceWorker.register('/sw.js?version=online-toggle-v1');
+      if (reg?.waiting) reg.waiting.postMessage({ type:'SKIP_WAITING' });
+    }
+  } catch (err) {
+    console.warn('Offline worker registration failed', err);
+  }
+}
+
 function useLocal(key, initial){
   const [value,setValue] = useState(()=>{ try { return JSON.parse(localStorage.getItem(key)) ?? initial } catch { return initial }});
   useEffect(()=>localStorage.setItem(key, JSON.stringify(value)),[key,value]);
@@ -344,6 +372,20 @@ function App(){
   const [jpy,setJpy] = useState(Math.round(50*AUD_TO_JPY));
   const nextTrip = Math.ceil((new Date('2026-07-01T09:00:00')-today)/(1000*60*60*24));
   const allCollectionsReady = reminders.ready || notes.ready || journal.ready;
+  const [networkMode,setNetworkMode] = useState(preferredNetworkMode());
+
+  async function setTravelNetworkMode(mode){
+    try { localStorage.setItem('ajl-network-mode', mode); } catch {}
+    setNetworkMode(mode);
+    if(mode === 'online'){
+      await clearAppCaches();
+      alert('Online mode is on. The app will fetch the newest version from Vercel. The page will reload now.');
+      window.location.href = window.location.pathname + '?fresh=' + Date.now();
+    } else {
+      await registerOfflineWorker();
+      alert('Offline mode is on. Open the app once while online so it can save files for travel.');
+    }
+  }
 
   const tabs = [
     ['home','Home','🎀'],['reminders','Checklist','✅'],['routes','Routes','🚆'],['fuji','Fuji','🗻'],
@@ -359,7 +401,7 @@ function App(){
       <div>
         <h1>Ash, Jase & Lexie's Excellent Adventure</h1>
         <p>Dad, Mum and Lexie's shared Japan adventure book</p>
-        <small className={allCollectionsReady?'sync online':'sync'}>{allCollectionsReady?'Firebase sync ready':'Offline/local mode until sync connects'}</small>
+        <small className={allCollectionsReady?'sync online':'sync'}>{networkMode === 'online' ? 'Online mode: always fetch latest Vercel version' : (allCollectionsReady?'Offline capable + Firebase sync ready':'Offline/local mode until sync connects')}</small>
       </div>
     </header>
     <nav>{tabs.map(t=><button key={t[0]} onClick={()=>setTab(t[0])} className={tab===t[0]?'active':''}><span>{t[2]}</span>{t[1]}</button>)}</nav>
@@ -382,6 +424,30 @@ function App(){
 }
 
 function Card({title,icon,children,id}){return <article className="card" id={id}><h2>{icon}{title}</h2>{children}</article>}
+
+
+function NetworkModeCard(){
+  const [mode,setMode] = useState(preferredNetworkMode());
+  async function changeMode(next){
+    try { localStorage.setItem('ajl-network-mode', next); } catch {}
+    setMode(next);
+    if(next === 'online'){
+      await clearAppCaches();
+      window.location.href = window.location.pathname + '?fresh=' + Date.now();
+    } else {
+      await registerOfflineWorker();
+      alert('Offline mode is on. Open the app once while online before Japan so it can cache travel files.');
+    }
+  }
+  return <Card title="Online / Offline Mode" icon={<RefreshCw/>}>
+    <p><b>Online mode</b> keeps the app fresh from Vercel. <b>Offline mode</b> saves a travel copy for planes, trains and weak Wi-Fi.</p>
+    <div className="modeToggle">
+      <button className={mode==='online'?'active':''} onClick={()=>changeMode('online')}>🌐 Online mode</button>
+      <button className={mode==='offline'?'active':''} onClick={()=>changeMode('offline')}>📦 Offline travel mode</button>
+    </div>
+    <p className="tiny">Current: {mode === 'online' ? 'Online mode. Old caches are cleared.' : 'Offline mode. Cached copy is allowed.'}</p>
+  </Card>
+}
 
 function HomePage({nextTrip, reminders, journal, rewards}){
   const todayStars = rewards.items.filter(r=>r.day===dateKey()).reduce((a,b)=>a+(b.stars||1),0);
@@ -780,6 +846,7 @@ function FujiDay({reminders}){
 
 function Phone(){
   return <section className="grid" id="apple-maps-setup">
+    <NetworkModeCard />
     <Card title="Access on iPhone/iPad" icon={<Smartphone/>}><ol><li>Open the Vercel link in Safari.</li><li>Tap Share.</li><li>Tap Add to Home Screen.</li><li>Open it from the new icon.</li><li>Open once while online to cache files.</li></ol></Card>
     <Card title="Apple Maps Offline Setup" icon={<MapPin/>}><ol><li>Open Apple Maps before the trip.</li><li>Search Tokyo and choose Download Map.</li><li>Download Narita, Maihama/Disney, Tama Center/Puroland and Mount Fuji/Kawaguchiko.</li><li>Save hotel, airport, Disney, Puroland and Fuji meeting point as favourites.</li></ol></Card>
     <Card title="ALDI Prepaid SIM Notes" icon={<Smartphone/>}><ul><li>Turn on international roaming before leaving Australia.</li><li>Use hotel Wi-Fi where possible.</li><li>Download offline maps and translator packs before departure.</li><li>Keep screenshots/PDFs of tickets in Apple Files and Photos as backup.</li></ul></Card>

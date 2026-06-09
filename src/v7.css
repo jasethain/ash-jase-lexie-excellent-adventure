@@ -15,3 +15,14 @@
 .modeToggle button.active{background:linear-gradient(135deg,#ff7abf,#ffb6d9);color:#fff;border-color:#ff7abf;box-shadow:0 12px 28px rgba(226,69,144,.28)}
 .sync.online{background:#e8fff3;color:#08763e;border:1px solid #9be2bc}
 .sync{display:inline-flex;margin-top:.45rem;padding:.35rem .65rem;border-radius:999px;background:#fff2bf;color:#8a6400;font-weight:800;font-size:.78rem}
+
+.lookupHelp{
+  margin: 12px 0;
+  padding: 14px 16px;
+  border: 2px dashed rgba(190, 32, 118, .35);
+  background: rgba(255, 255, 255, .78);
+  border-radius: 18px;
+  box-shadow: 0 10px 24px rgba(164, 47, 111, .10);
+}
+.lookupHelp b{ color:#9b145b; }
+.lookupHelp p{ margin:8px 0 10px; }

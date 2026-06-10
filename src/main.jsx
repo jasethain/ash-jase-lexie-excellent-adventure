@@ -421,6 +421,14 @@ async function uploadFile(file, folder='uploads'){
   return { url, path, name:file.name, type:file.type };
 }
 
+
+function practiceKeyFor(lessonId) {
+  return `${lessonId}-${dateKey()}`;
+}
+function hasPractisedToday(progressItems, lessonId) {
+  return progressItems.some(x => (x.practiceKey === practiceKeyFor(lessonId)) || (x.lessonId === lessonId && x.practiceDate === dateKey()));
+}
+
 function App(){
   const [tab,setTab] = useState('home');
   const reminders = useFirebaseCollection('reminders', defaultReminders);
@@ -460,7 +468,7 @@ function App(){
   return <div className="app">
     <div className="sakura"></div><div className="bows"></div>
     <header>
-      <div className="kitty">🎀</div>
+      <div className="kitty"><img src="/icon-192.png" alt="AJL Japan icon"/></div>
       <div>
         <h1>Ash, Jase & Lexie's Excellent Adventure</h1>
         <p>Dad, Mum and Lexie's shared Japan adventure book</p>
@@ -643,7 +651,7 @@ function LexieJournal({journal,rewards,photos,drawings}){
     setAnswers({}); setStickers([]);
   }
   return <section className="grid" id="journal">
-    <Card title="Lexie's Adventure Book" icon={<BookOpen/>}>
+    <Card title="Lexie's Adventure Book - Family View" icon={<BookOpen/>}>
       <div className="dayTabs">{lexiePages.map(p=><button className={page===p.id?'active chip':'chip'} onClick={()=>setPage(p.id)}>{p.emoji} {p.label}</button>)}</div>
       <h2>{current.emoji} {current.title}</h2>
       {current.prompts.map((p,i)=><div className="prompt" key={p}>
@@ -659,7 +667,7 @@ function LexieJournal({journal,rewards,photos,drawings}){
     <Card title="Confidence Toolkit" icon={<Heart/>}><ul><li>Talk to Mum or Dad.</li><li>Use the translator phrase cards.</li><li>Find plain food or a snack break.</li><li>Take 3 slow breaths.</li><li>Look at today's plan and pick one small next step.</li></ul></Card>
     <DrawingStudio drawings={drawings} rewards={rewards} pageTitle={current.title}/>
     <PhotoUploader photos={photos} rewards={rewards} source="Lexie Journal"/>
-    <Card title="Saved Journal Pages" icon={<Sparkles/>}>{journal.items.length===0?<p>No journal pages yet.</p>:journal.items.slice(0,8).map(e=><div className="note"><b>{e.emoji} {e.pageTitle}</b><small>{e.deviceDate || ''} · {e.mood || ''}</small>{e.stickers?.length>0 && <div className="stickerLine">{e.stickers.join(' ')}</div>}{e.answers && Object.entries(e.answers).slice(0,4).map(([q,a])=><p><b>{q}</b><br/>{a}</p>)}</div>)}</Card>
+    <Card title="Family Journal View - Saved Pages" icon={<Sparkles/>}>{journal.items.length===0?<p>No journal pages yet. When Lexie saves a page, everyone can view it here.</p>:journal.items.slice(0,8).map(e=><div className="note"><b>{e.emoji} {e.pageTitle}</b><small>{e.deviceDate || ''} · {e.mood || ''}</small>{e.stickers?.length>0 && <div className="stickerLine">{e.stickers.join(' ')}</div>}{e.answers && Object.entries(e.answers).slice(0,4).map(([q,a])=><p><b>{q}</b><br/>{a}</p>)}</div>)}</Card>
   </section>
 }
 
@@ -718,168 +726,164 @@ function PhotoUploader({photos,rewards,source='Photo Memories'}){
   </Card>
 }
 
-function JapaneseLearning({progress,rewards,customPhrases}){
-  const [sourceText,setSourceText] = useState('');
-  const [translatedText,setTranslatedText] = useState('');
-  const [romaji,setRomaji] = useState('');
-  const [category,setCategory] = useState('My Phrases');
-  const [direction,setDirection] = useState('en-ja');
-  const [status,setStatus] = useState('');
-  const [busy,setBusy] = useState(false);
-  const phraseLookup = {
-    'hello': ['こんにちは', 'Konnichiwa'],
-    'good morning': ['おはようございます', 'Ohayou gozaimasu'],
-    'thank you': ['ありがとうございます', 'Arigatou gozaimasu'],
-    'thanks': ['ありがとう', 'Arigatou'],
-    'yes': ['はい', 'Hai'],
-    'no': ['いいえ', 'Iie'],
-    'excuse me': ['すみません', 'Sumimasen'],
-    'sorry': ['すみません', 'Sumimasen'],
-    'please': ['お願いします', 'Onegaishimasu'],
-    'where is the toilet': ['トイレはどこですか？', 'Toire wa doko desu ka?'],
-    'where is the bathroom': ['トイレはどこですか？', 'Toire wa doko desu ka?'],
-    'how much is it': ['いくらですか？', 'Ikura desu ka?'],
-    'which platform': ['何番線ですか？', 'Nanbansen desu ka?'],
-    'i am lost': ['私は迷子です。', 'Watashi wa maigo desu.'],
-    'please help me': ['助けてください。', 'Tasukete kudasai.'],
-    'i am vegetarian': ['私はベジタリアンです。', 'Watashi wa bejitarian desu.'],
-    'no meat please': ['肉なしでお願いします。', 'Niku nashi de onegaishimasu.'],
-    'no fish please': ['魚なしでお願いします。', 'Sakana nashi de onegaishimasu.'],
-    'no sauce please': ['ソースなしでお願いします。', 'Sōsu nashi de onegaishimasu.'],
-    'plain pasta no sauce please': ['ソースなしのプレーンパスタをお願いします。', 'Sōsu nashi no purēn pasuta o onegaishimasu.'],
-    'do you have chicken nuggets': ['チキンナゲットはありますか？', 'Chikin nagetto wa arimasu ka?'],
-    'do you have hot chips': ['フライドポテトはありますか？', 'Furaido poteto wa arimasu ka?'],
-    'where is the train station': ['駅はどこですか？', 'Eki wa doko desu ka?'],
-    'can i take a photo': ['写真を撮ってもいいですか？', 'Shashin o totte mo ii desu ka?'],
-    'photo please': ['写真をお願いします。', 'Shashin o onegaishimasu.'],
-    'dog': ['犬', 'Inu'],
-    'cat': ['猫', 'Neko'],
-    'water': ['水', 'Mizu'],
-    'train station': ['駅', 'Eki']
-  };
-  const reverseLookup = Object.fromEntries(Object.entries(phraseLookup).map(([en,[ja,ro]])=>[ja.replace(/[。？?]/g,'').trim(), [en, ro]]));
-  function normalisePhrase(value){ return value.toLowerCase().trim().replace(/[?.!]/g,'').replace(/\s+/g,' '); }
-  function normaliseJapanese(value){ return value.trim().replace(/[。？?]/g,''); }
-  async function translateOnline(){
-    const text = sourceText.trim();
-    if(!text){ setStatus('Type something to translate first.'); return; }
-    setBusy(true); setStatus('Translating online...');
-    const from = direction === 'en-ja' ? 'en' : 'ja';
-    const to = direction === 'en-ja' ? 'ja' : 'en';
-    try {
-      const url = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=${from}|${to}`;
-      const res = await fetch(url, { cache:'no-store' });
-      if(!res.ok) throw new Error('Translation service unavailable');
-      const json = await res.json();
-      const output = json?.responseData?.translatedText || '';
-      if(!output) throw new Error('No translation returned');
-      setTranslatedText(output);
-      const computedRomaji = direction === 'en-ja'
-        ? phraseRomaji(text, output)
-        : phraseRomaji(output, text);
-      setRomaji(computedRomaji || '');
-      setStatus('Online translation ready. Romaji pronunciation has been added where possible. Check important phrases with Mum or Dad before relying on them.');
-    } catch (err) {
-      const key = direction === 'en-ja' ? normalisePhrase(text) : normaliseJapanese(text);
-      const found = direction === 'en-ja' ? phraseLookup[key] : reverseLookup[key];
-      if(found){
-        setTranslatedText(found[0]);
-        setRomaji(found[1] || '');
-        setStatus('Online translation was unavailable, so I used the saved offline phrasebook.');
-      } else {
-        setStatus('Online translation is unavailable and this phrase is not in the offline phrasebook yet. Try a simpler travel phrase, or save it and add the translation later.');
-      }
-    } finally { setBusy(false); }
-  }
-  function offlineSuggest(){
-    const key = direction === 'en-ja' ? normalisePhrase(sourceText) : normaliseJapanese(sourceText);
-    const found = direction === 'en-ja' ? phraseLookup[key] : reverseLookup[key];
-    if(found){ setTranslatedText(found[0]); setRomaji(found[1] || ''); setStatus('Offline phrase found.'); }
-    else { setTranslatedText(''); setRomaji(''); setStatus('No offline phrase found. Tap Translate Online while internet is available.'); }
-  }
-  async function saveCustomPhrase(){
-    if(!sourceText.trim() && !translatedText.trim()) return;
-    const en = direction === 'en-ja' ? sourceText.trim() : translatedText.trim();
-    const ja = direction === 'en-ja' ? translatedText.trim() : sourceText.trim();
-    await customPhrases.add({
-      en,
-      ja,
-      romaji: (romaji || phraseRomaji(en, ja)).trim(),
-      category: category || 'My Phrases',
-      practised:false,
-      favourite:false,
-      source:'online-or-offline-translator',
-      direction
+function JapaneseLearning({ progress, rewards }) {
+  const [direction, setDirection] = useState('en-ja');
+  const [input, setInput] = useState('');
+  const [result, setResult] = useState(null);
+  const [customJapanese, setCustomJapanese] = useState('');
+  const [customRomaji, setCustomRomaji] = useState('');
+  const [busy, setBusy] = useState(false);
+  const todayKey = dateKey();
+
+  const practisedToday = (lessonId) => hasPractisedToday(progress.items, lessonId);
+
+  async function awardPracticeStar(lesson) {
+    const lessonId = lesson.id || lesson.lessonId || `phrase-${Date.now()}`;
+    if (practisedToday(lessonId)) return;
+    const english = lesson.en || lesson.english || 'Saved phrase';
+    const japanese = lesson.ja || lesson.japanese || '';
+    const romaji = lesson.romaji || phraseRomaji(english, japanese);
+    await progress.add({
+      lessonId,
+      practiceKey: practiceKeyFor(lessonId),
+      en: english,
+      ja: japanese,
+      romaji,
+      practised: true,
+      practiceDate: todayKey,
+      day: todayKey
     });
-    setSourceText(''); setTranslatedText(''); setRomaji(''); setCategory('My Phrases'); setStatus('Saved to Lexie’s phrase book.');
+    await rewards.add({
+      day: todayKey,
+      stars: 1,
+      reason: `Japanese practice today: ${english}`,
+      type: 'japanese',
+      lessonId,
+      practiceKey: practiceKeyFor(lessonId)
+    });
   }
-  async function complete(lesson){
-    const already = progress.items.some(x=>x.lessonId===lesson.id);
-    if(!already){
-      await progress.add({lessonId:lesson.id, en:lesson.en, ja:lesson.ja, romaji:lesson.romaji, practised:true});
-      await rewards.add({ day:dateKey(), stars:1, reason:`Practised Japanese: ${lesson.en}`, type:'japanese' });
+
+  async function translateNow() {
+    const text = input.trim();
+    if (!text) return;
+    setBusy(true);
+    try {
+      const cleanKey = text.toLowerCase().replace(/[?!.。！？]+$/g, '');
+      let translated = '';
+      let romaji = '';
+      if (direction === 'en-ja' && typeof OFFLINE_TRANSLATIONS !== 'undefined' && OFFLINE_TRANSLATIONS[cleanKey]) {
+        translated = OFFLINE_TRANSLATIONS[cleanKey].jp;
+        romaji = OFFLINE_TRANSLATIONS[cleanKey].romaji;
+      } else {
+        const source = direction === 'en-ja' ? 'en' : 'ja';
+        const target = direction === 'en-ja' ? 'ja' : 'en';
+        const res = await fetch('https://translate.argosopentech.com/translate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ q: text, source, target, format: 'text' })
+        });
+        if (!res.ok) throw new Error('Translation failed');
+        const json = await res.json();
+        translated = json.translatedText || '';
+        romaji = direction === 'en-ja' ? phraseRomaji(text, translated) : phraseRomaji(translated, text);
+      }
+      const next = {
+        english: direction === 'en-ja' ? text : translated,
+        japanese: direction === 'en-ja' ? translated : text,
+        romaji: direction === 'en-ja' ? (romaji || phraseRomaji(text, translated)) : phraseRomaji(translated, text)
+      };
+      setResult(next);
+      setCustomJapanese(next.japanese || '');
+      setCustomRomaji(next.romaji || '');
+    } catch (err) {
+      alert('Online translation is not available right now. Try a common phrase or use the offline phrase cards.');
+    } finally {
+      setBusy(false);
     }
   }
-  async function practiseCustom(phrase){
-    if(phrase.id){ await customPhrases.update(phrase.id,{practised:true, practisedAt:new Date().toISOString()}); }
-    await rewards.add({ day:dateKey(), stars:1, reason:`Practised custom phrase: ${phrase.en || phrase.ja}`, type:'japanese' });
+
+  async function saveCustomPhrase() {
+    const english = result?.english || (direction === 'en-ja' ? input : '');
+    const japanese = customJapanese || result?.japanese || (direction === 'ja-en' ? input : '');
+    const romaji = customRomaji || phraseRomaji(english, japanese);
+    if (!english && !japanese) return;
+    const lessonId = `custom-${Date.now()}`;
+    await progress.add({
+      lessonId,
+      en: english,
+      ja: japanese,
+      romaji,
+      custom: true,
+      savedPhrase: true,
+      practiceDate: '',
+      day: todayKey
+    });
+    alert('Saved to Lexie’s phrase book.');
   }
+
+  const customPhrases = progress.items.filter(x => x.custom || x.savedPhrase);
+  const learnedToday = progress.items.filter(x => x.practiceDate === todayKey).length;
+
   return <section className="grid" id="phrases">
-    <Card title="Japanese Phrase Quest" icon={<GraduationCap/>}><p>Practising simple phrases before departure earns Lexie journal rewards. Mum or Dad can help.</p></Card>
-    <Card title="Built-in English ↔ Japanese Translator" icon={<PlusCircle/>}>
-      <p>Online mode translates between English and Japanese. Offline mode uses the saved travel phrasebook.</p>
-      <div className="linkRow"><button className={direction==='en-ja'?'active':''} onClick={()=>{setDirection('en-ja'); setSourceText(''); setTranslatedText(''); setStatus('');}}>English → Japanese</button><button className={direction==='ja-en'?'active':''} onClick={()=>{setDirection('ja-en'); setSourceText(''); setTranslatedText(''); setStatus('');}}>Japanese → English</button></div>
-      <textarea value={sourceText} onChange={e=>setSourceText(e.target.value)} placeholder={direction==='en-ja'?'Type English, e.g. Where is the toilet?':'日本語を入力してください'} />
-      <div className="linkRow"><button disabled={busy} onClick={translateOnline}>{busy?'Translating...':'Translate Online'}</button><button onClick={offlineSuggest}>Offline Phrasebook</button><button onClick={saveCustomPhrase}>Save phrase</button></div>
-      {status && <div className="lookupHelp"><b>Translator</b><p>{status}</p></div>}
-      {translatedText && <TranslationResultCard
-        english={direction === 'en-ja' ? sourceText : translatedText}
-        japanese={direction === 'en-ja' ? translatedText : sourceText}
-        romaji={romaji}
-      />}
-      <textarea value={translatedText} onChange={e=>setTranslatedText(e.target.value)} placeholder={direction==='en-ja'?'Japanese translation':'English translation'} />
-      {direction==='en-ja' && <input value={romaji} onChange={e=>setRomaji(e.target.value)} placeholder="Romaji pronunciation, optional" />}
-      <input value={category} onChange={e=>setCategory(e.target.value)} placeholder="Category, e.g. Food, Train, Disney" />
-      {direction==='en-ja' && translatedText && <button onClick={()=>speak(translatedText)}>Hear Japanese</button>}
-      <p className="tiny">Online translation uses a free public translation service when available. Important emergency, medical, allergy, and travel phrases should still be checked by an adult.</p>
+    <Card title="Japanese Phrase Quest" icon={<GraduationCap/>}>
+      <p>Lexie can earn a fresh ⭐ every day for practising each word or phrase. Practice stars reset daily, so every new day counts again.</p>
+      <div className="stars">{Array.from({length:5}).map((_,i)=><span key={i} className={i<Math.min(learnedToday,5)?'won':''}>⭐</span>)}</div>
+      <p>{learnedToday} Japanese practice star{learnedToday===1?'':'s'} earned today.</p>
     </Card>
-    {customPhrases.items.length > 0 && <Card title="Lexie's Saved Phrase Book" icon={<BookOpen/>}>
-      {customPhrases.items.map(p=><div className="phraseCard" key={p.id}>
-        <b>{p.practised?'✅':'📌'} {p.en || p.ja}</b>
-        {p.ja && <div className="ja">{p.ja}</div>}
-        {p.ja && <small>🔤 {p.romaji || phraseRomaji(p.en || p.english, p.ja || p.japanese)}</small>}
-        <small>{p.category || 'My Phrases'}</small>
-        <div className="linkRow">
-          {p.ja && <button onClick={()=>speak(p.ja)}>Hear it</button>}
-          <button onClick={()=>practiseCustom(p)}>Practised + ⭐</button>
-          <button onClick={()=>customPhrases.update(p.id,{favourite:!p.favourite})}>{p.favourite?'★ Favourite':'☆ Favourite'}</button>
+
+    <Card title="English ↔ Japanese Translator" icon={<Mic/>}>
+      <div className="dayTabs">
+        <button className={direction==='en-ja'?'active chip':'chip'} onClick={()=>setDirection('en-ja')}>English → Japanese</button>
+        <button className={direction==='ja-en'?'active chip':'chip'} onClick={()=>setDirection('ja-en')}>Japanese → English</button>
+      </div>
+      <textarea value={input} onChange={e=>setInput(e.target.value)} placeholder={direction==='en-ja'?'Type English here...':'日本語を入力してください...'} />
+      <button onClick={translateNow} disabled={busy}>{busy?'Translating...':'Translate'}</button>
+      {result && <div className="translationResultCard">
+        {result.english && <div><b>🇦🇺 English</b><p>{result.english}</p></div>}
+        {result.japanese && <div><b>🇯🇵 Japanese</b><p className="ja">{result.japanese}</p></div>}
+        {(result.romaji || customRomaji) && <div><b>🔤 Romaji pronunciation</b><p>{result.romaji || customRomaji}</p></div>}
+        <input value={customJapanese} onChange={e=>setCustomJapanese(e.target.value)} placeholder="Japanese translation"/>
+        <input value={customRomaji} onChange={e=>setCustomRomaji(e.target.value)} placeholder="Romaji pronunciation"/>
+        <div className="resultActions">
+          {customJapanese && <button onClick={()=>speak(customJapanese)}>Hear Japanese</button>}
+          <button onClick={saveCustomPhrase}>Save phrase</button>
         </div>
-      </div>)}
-    </Card>}
+      </div>}
+    </Card>
+
     {japaneseLessons.map(l=>{
-      const done=progress.items.some(x=>x.lessonId===l.id);
-      return <Card key={l.id} title={`${done?'✅':'🇯🇵'} ${l.en}`} icon={<Mic/>}>
-        <div className="ja">{l.ja}</div><p>{l.romaji || phraseRomaji(l.en || l.english, l.ja || l.japanese)}</p><small>{l.category}</small>
-        <button onClick={()=>speak(l.ja)}>Hear it</button>
-        <button disabled={done} onClick={()=>complete(l)}>{done?'Star earned':'Practised it + ⭐'}</button>
+      const doneToday = practisedToday(l.id);
+      const romaji = l.romaji || phraseRomaji(l.en, l.ja);
+      return <Card key={l.id} title={`${doneToday?'✅':'🇯🇵'} ${l.en}`} icon={<Mic/>}>
+        <div className="ja">{l.ja}</div>
+        <p><b>Romaji:</b> {romaji}</p>
+        <small>{l.category}</small>
+        <div className="resultActions">
+          <button onClick={()=>speak(l.ja)}>Hear it</button>
+          <button disabled={doneToday} onClick={()=>awardPracticeStar({...l, romaji})}>{doneToday?'Star earned today':'Practised today + ⭐'}</button>
+        </div>
       </Card>
     })}
+
+    <Card title="Lexie's Saved Phrase Book" icon={<BookOpen/>}>
+      {customPhrases.length===0 ? <p>No custom phrases saved yet.</p> : customPhrases.slice(0,30).map(p=>{
+        const lessonId = p.lessonId || p.id;
+        const doneToday = lessonId && practisedToday(lessonId);
+        const english = p.en || p.english || 'Saved phrase';
+        const japanese = p.ja || p.japanese || '';
+        const romaji = p.romaji || phraseRomaji(english, japanese);
+        return <div className="note" key={p.id}>
+          <b>{english}</b>
+          {japanese && <p className="ja">{japanese}</p>}
+          {romaji && <p><b>Romaji:</b> {romaji}</p>}
+          <div className="resultActions">
+            {japanese && <button onClick={()=>speak(japanese)}>Hear Japanese</button>}
+            <button disabled={doneToday} onClick={()=>awardPracticeStar({id:lessonId, en:english, ja:japanese, romaji})}>{doneToday?'Star earned today':'Practise today + ⭐'}</button>
+          </div>
+        </div>
+      })}
+    </Card>
   </section>
-}
-
-
-function TranslationResultCard({ english, japanese, romaji, onSave }) {
-  if (!english && !japanese) return null;
-  const computedRomaji = romaji || phraseRomaji(english, japanese);
-  return <div className="translationResultCard">
-    {english && <div><b>🇦🇺 English</b><p>{english}</p></div>}
-    {japanese && <div><b>🇯🇵 Japanese</b><p className="ja">{japanese}</p></div>}
-    {computedRomaji && <div><b>🔤 Romaji pronunciation</b><p>{computedRomaji}</p></div>}
-    <div className="resultActions">
-      {japanese && <button onClick={() => speak(japanese)}>Hear Japanese</button>}
-      {onSave && <button onClick={onSave}>Save phrase</button>}
-    </div>
-  </div>
 }
 
 function Rewards({rewards}){
